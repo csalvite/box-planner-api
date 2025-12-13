@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "npm: start:dev",
+      "type": "npm",
+      "script": "start:dev",
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "npm: start:debug",
+      "type": "npm",
+      "script": "start:debug",
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "prisma: db pull",
+      "type": "shell",
+      "command": "npx prisma db pull",
+      "group": "build"
+    },
+    {
+      "label": "prisma: generate",
+      "type": "shell",
+      "command": "npx prisma generate",
+      "group": "build"
+    }
+  ]
+}

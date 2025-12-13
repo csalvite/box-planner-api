@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["public", "auth"]
+}
+
+/**
+ * Categorías de bloques (calentamiento, técnica, saco...)
+ * Tabla real: public.block_categories
+ */
+model BlockCategory {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  name        String
+  description String?
+
+  blocks      Block[]
+
+  @@map("block_categories") // nombre real de la tabla
+  @@schema("public")
+}
+
+/**
+ * Bloques de entrenamiento
+ * Tabla real: public.blocks
+ */
+model Block {
+  id                   String           @id @default(uuid()) @db.Uuid
+  userId               String           @map("user_id")      // columna user_id
+  name                 String
+  description          String?
+  level                String?
+  estimatedDurationSec Int              @default(0) @map("estimated_duration_sec")
+  isPublic             Boolean          @default(false) @map("is_public")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  categoryId           Int?             @map("category_id")
+  category             BlockCategory?   @relation(fields: [categoryId], references: [id])
+
+  exercises            BlockExercise[]
+  trainingBlocks       TrainingBlock[]
+
+  @@map("blocks")
+  @@schema("public")
+}
+
+/**
+ * Ejercicios dentro de un bloque
+ * Tabla real: public.block_exercises
+ */
+model BlockExercise {
+  id           String     @id @default(uuid()) @db.Uuid
+  blockId      String     @map("block_id")
+  name         String
+  description  String?
+  durationSec  Int?       @map("duration_sec")
+  reps         Int?
+  restSec      Int        @default(0) @map("rest_sec")
+  orderIndex   Int        @map("order_index")
+  targetArea   String?    @map("target_area")
+  mediaId      String?    @map("media_id")
+  notes        String?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  block        Block      @relation(fields: [blockId], references: [id])
+  media        MediaAsset? @relation(fields: [mediaId], references: [id])
+
+  @@map("block_exercises")
+  @@schema("public")
+}
+
+/**
+ * Media (fotos y vídeos)
+ * Tabla real: public.media_assets
+ */
+model MediaAsset {
+  id          String           @id @default(uuid()) @db.Uuid
+  userId      String           @map("user_id")
+  url         String
+  type        String           // "image" | "video"
+  title       String?
+  description String?
+  tags        String[]
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  exercises   BlockExercise[]
+
+  @@map("media_assets")
+  @@schema("public")
+}
+
+/**
+ * Entrenamientos completos
+ * Tabla real: public.trainings
+ */
+model Training {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id")
+  title            String
+  description      String?
+  trainingType     String           @map("training_type") // "personal" | "group"
+  level            String?
+  groupSizeMin     Int?             @map("group_size_min")
+  groupSizeMax     Int?             @map("group_size_max")
+  totalDurationSec Int              @default(0) @map("total_duration_sec")
+  notes            String?
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  blocks           TrainingBlock[]
+
+  @@map("trainings")
+  @@schema("public")
+}
+
+/**
+ * Relación entrenamiento ↔ bloques
+ * Tabla real: public.training_blocks
+ */
+model TrainingBlock {
+  id                String    @id @default(uuid()) @db.Uuid
+  trainingId        String    @map("training_id")
+  blockId           String    @map("block_id")
+  orderIndex        Int       @map("order_index")
+  customDurationSec Int?      @map("custom_duration_sec")
+  notes             String?
+
+  training          Training  @relation(fields: [trainingId], references: [id])
+  block             Block     @relation(fields: [blockId], references: [id])
+
+  @@map("training_blocks")
+  @@schema("public")
+}
