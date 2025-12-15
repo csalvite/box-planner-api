@@ -136,3 +136,14 @@ model TrainingBlock {
   @@map("training_blocks")
   @@schema("public")
 }
+
+model Profile {
+  id        String   @id @db.Uuid
+  email     String?  @unique
+  role      String   @default("trainer")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("profiles")
+  @@schema("public")
+}
+
