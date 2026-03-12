@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { UpdateBlockDto } from './dto/update-block.dto';
@@ -33,7 +33,7 @@ export class BlocksService {
   }
 
   async findOne(id: string, userId: string) {
-    return this.prisma.block.findFirst({
+    const block = await this.prisma.block.findFirst({
       where: {
         id,
         userId,
@@ -45,9 +45,17 @@ export class BlocksService {
         },
       },
     });
+
+    if (!block) {
+      throw new NotFoundException('Block not found');
+    }
+
+    return block;
   }
 
   async update(id: string, userId: string, dto: UpdateBlockDto) {
+    await this.findOne(id, userId);
+
     return this.prisma.block.update({
       where: { id },
       data: {
@@ -65,7 +73,6 @@ export class BlocksService {
   }
 
   async remove(id: string, userId: string) {
-    // por seguridad, primero comprobamos que pertenece al usuario
     await this.findOne(id, userId);
     return this.prisma.block.delete({
       where: { id },
