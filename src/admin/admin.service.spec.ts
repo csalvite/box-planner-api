@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { AdminService } from './admin.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -11,6 +12,16 @@ describe('AdminService', () => {
       upsert: jest.fn(),
     },
   };
+  const configMock = {
+    getOrThrow: jest.fn((key: string) => {
+      const values = {
+        SUPABASE_URL: 'http://localhost:54321',
+        SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+      };
+
+      return values[key];
+    }),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -19,6 +30,10 @@ describe('AdminService', () => {
         {
           provide: PrismaService,
           useValue: prismaMock,
+        },
+        {
+          provide: ConfigService,
+          useValue: configMock,
         },
       ],
     }).compile();

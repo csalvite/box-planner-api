@@ -1,25 +1,36 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { createClient } from '@supabase/supabase-js';
+import { ConfigService } from '@nestjs/config';
+import { MemberStatus, OrganizationRole } from '@prisma/client';
+import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AdminService {
-  private supabaseAdmin = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!, // ADMIN ONLY
-    {
-      auth: { persistSession: false },
-    },
-  );
+  private readonly supabaseAdmin: SupabaseClient;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {
+    this.supabaseAdmin = createClient(
+      this.configService.getOrThrow<string>('SUPABASE_URL'),
+      this.configService.getOrThrow<string>('SUPABASE_SERVICE_ROLE_KEY'),
+      {
+        auth: { persistSession: false },
+      },
+    );
+  }
 
   async assertAdmin(userId: string) {
-    const profile = await this.prisma.profile.findUnique({
-      where: { id: userId },
+    const membership = await this.prisma.organizationMember.findFirst({
+      where: {
+        profileId: userId,
+        status: MemberStatus.ACTIVE,
+        role: { in: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+      },
     });
 
-    if (!profile || profile.role !== 'admin') {
+    if (!membership) {
       throw new ForbiddenException('Admin only');
     }
   }
@@ -47,12 +58,10 @@ export class AdminService {
       where: { id: newUser.id },
       update: {
         email: input.email,
-        role: input.role ?? 'trainer',
       },
       create: {
         id: newUser.id,
         email: input.email,
-        role: input.role ?? 'trainer',
       },
     });
 
@@ -60,12 +69,11 @@ export class AdminService {
       id: newUser.id,
       email: input.email,
       role: input.role ?? 'trainer',
-      tempPassword, // para que puedas dársela al entrenador (luego cambiaremos a invite)
+      tempPassword,
     };
   }
 
   private generateTempPassword() {
-    // simple pero decente para dev
     return `Bp-${Math.random().toString(36).slice(2)}-${Math.random()
       .toString(36)
       .slice(2)}`.slice(0, 18);

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { TrainingType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
@@ -9,23 +10,47 @@ import { ReorderTrainingBlocksDto } from './dto/reorder-training-blocks.dto';
 export class TrainingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async ensureTrainingOwned(trainingId: string, userId: string) {
+  private async ensureTrainingExists(
+    trainingId: string,
+    organizationId: string,
+  ) {
     const training = await this.prisma.training.findFirst({
-      where: { id: trainingId, userId },
+      where: { id: trainingId, organizationId },
     });
 
-    if (!training) throw new NotFoundException('Training not found');
+    if (!training) {
+      throw new NotFoundException('Training not found');
+    }
+
     return training;
   }
 
-  private async ensureBlockOwned(blockId: string, userId: string) {
+  private async ensureBlockExists(blockId: string, organizationId: string) {
     const block = await this.prisma.block.findFirst({
-      where: { id: blockId, userId },
+      where: { id: blockId, organizationId },
       select: { id: true, estimatedDurationSec: true },
     });
 
-    if (!block) throw new NotFoundException('Block not found');
+    if (!block) {
+      throw new NotFoundException('Block not found');
+    }
+
     return block;
+  }
+
+  private async ensureTrainingBlockExists(
+    trainingId: string,
+    trainingBlockId: string,
+  ) {
+    const trainingBlock = await this.prisma.trainingBlock.findFirst({
+      where: { id: trainingBlockId, trainingId },
+    });
+
+    if (!trainingBlock) {
+      throw new NotFoundException('Training block not found');
+    }
+
+    return trainingBlock;
   }
 
   private async recalcTrainingDuration(trainingId: string) {
@@ -47,26 +72,29 @@ export class TrainingsService {
     return total;
   }
 
-  async create(userId: string, dto: CreateTrainingDto) {
-    const training = await this.prisma.training.create({
+  async create(
+    userId: string,
+    organizationId: string,
+    dto: CreateTrainingDto,
+  ) {
+    return this.prisma.training.create({
       data: {
-        userId,
+        organizationId,
+        createdById: userId,
         title: dto.title,
         description: dto.description,
-        trainingType: dto.trainingType,
+        trainingType: this.toPrismaTrainingType(dto.trainingType),
         level: dto.level,
         groupSizeMin: dto.groupSizeMin,
         groupSizeMax: dto.groupSizeMax,
         notes: dto.notes,
       },
     });
-
-    return training;
   }
 
-  async findAll(userId: string) {
+  async findAll(organizationId: string) {
     return this.prisma.training.findMany({
-      where: { userId },
+      where: { organizationId },
       orderBy: { updatedAt: 'desc' },
       include: {
         blocks: {
@@ -79,11 +107,9 @@ export class TrainingsService {
     });
   }
 
-  async findOne(trainingId: string, userId: string) {
-    await this.ensureTrainingOwned(trainingId, userId);
-
-    return this.prisma.training.findFirst({
-      where: { id: trainingId, userId },
+  async findOne(trainingId: string, organizationId: string) {
+    const training = await this.prisma.training.findFirst({
+      where: { id: trainingId, organizationId },
       include: {
         blocks: {
           orderBy: { orderIndex: 'asc' },
@@ -97,17 +123,29 @@ export class TrainingsService {
         },
       },
     });
+
+    if (!training) {
+      throw new NotFoundException('Training not found');
+    }
+
+    return training;
   }
 
-  async update(trainingId: string, userId: string, dto: UpdateTrainingDto) {
-    await this.ensureTrainingOwned(trainingId, userId);
+  async update(
+    trainingId: string,
+    organizationId: string,
+    dto: UpdateTrainingDto,
+  ) {
+    await this.ensureTrainingExists(trainingId, organizationId);
 
     return this.prisma.training.update({
-      where: { id: trainingId },
+      where: { id: trainingId, organizationId },
       data: {
         title: dto.title,
         description: dto.description,
-        trainingType: dto.trainingType,
+        trainingType: dto.trainingType
+          ? this.toPrismaTrainingType(dto.trainingType)
+          : undefined,
         level: dto.level,
         groupSizeMin: dto.groupSizeMin,
         groupSizeMax: dto.groupSizeMax,
@@ -116,25 +154,24 @@ export class TrainingsService {
     });
   }
 
-  async remove(trainingId: string, userId: string) {
-    await this.ensureTrainingOwned(trainingId, userId);
+  async remove(trainingId: string, organizationId: string) {
+    await this.ensureTrainingExists(trainingId, organizationId);
 
-    // Borra primero training_blocks para evitar FK issues
     await this.prisma.trainingBlock.deleteMany({ where: { trainingId } });
-    await this.prisma.training.delete({ where: { id: trainingId } });
+    await this.prisma.training.delete({
+      where: { id: trainingId, organizationId },
+    });
 
     return { success: true };
   }
 
-  // --- TrainingBlocks ---
-
   async addBlock(
     trainingId: string,
-    userId: string,
+    organizationId: string,
     dto: AddBlockToTrainingDto,
   ) {
-    await this.ensureTrainingOwned(trainingId, userId);
-    await this.ensureBlockOwned(dto.blockId, userId);
+    await this.ensureTrainingExists(trainingId, organizationId);
+    await this.ensureBlockExists(dto.blockId, organizationId);
 
     let orderIndex = dto.orderIndex;
     if (orderIndex === undefined || orderIndex === null) {
@@ -162,14 +199,10 @@ export class TrainingsService {
   async removeBlock(
     trainingId: string,
     trainingBlockId: string,
-    userId: string,
+    organizationId: string,
   ) {
-    await this.ensureTrainingOwned(trainingId, userId);
-
-    const tb = await this.prisma.trainingBlock.findFirst({
-      where: { id: trainingBlockId, trainingId },
-    });
-    if (!tb) throw new NotFoundException('Training block not found');
+    await this.ensureTrainingExists(trainingId, organizationId);
+    await this.ensureTrainingBlockExists(trainingId, trainingBlockId);
 
     await this.prisma.trainingBlock.delete({ where: { id: trainingBlockId } });
     await this.recalcTrainingDuration(trainingId);
@@ -179,19 +212,39 @@ export class TrainingsService {
 
   async reorderBlocks(
     trainingId: string,
-    userId: string,
+    organizationId: string,
     dto: ReorderTrainingBlocksDto,
   ) {
-    await this.ensureTrainingOwned(trainingId, userId);
+    await this.ensureTrainingExists(trainingId, organizationId);
 
-    await this.prisma.$transaction(
-      dto.order.map((item) =>
+    const trainingBlockIds = dto.order.map((item) => item.trainingBlockId);
+    const uniqueTrainingBlockIds = [...new Set(trainingBlockIds)];
+    const existingTrainingBlocks = await this.prisma.trainingBlock.findMany({
+      where: {
+        trainingId,
+        id: { in: uniqueTrainingBlockIds },
+      },
+      select: { id: true },
+    });
+
+    if (existingTrainingBlocks.length !== uniqueTrainingBlockIds.length) {
+      throw new NotFoundException('Training block not found');
+    }
+
+    await this.prisma.$transaction([
+      ...dto.order.map((item, index) =>
+        this.prisma.trainingBlock.update({
+          where: { id: item.trainingBlockId },
+          data: { orderIndex: -1000000 - index },
+        }),
+      ),
+      ...dto.order.map((item) =>
         this.prisma.trainingBlock.update({
           where: { id: item.trainingBlockId },
           data: { orderIndex: item.orderIndex },
         }),
       ),
-    );
+    ]);
 
     await this.recalcTrainingDuration(trainingId);
 
@@ -200,5 +253,9 @@ export class TrainingsService {
       orderBy: { orderIndex: 'asc' },
       include: { block: true },
     });
+  }
+
+  private toPrismaTrainingType(type: 'personal' | 'group') {
+    return type === 'personal' ? TrainingType.PERSONAL : TrainingType.GROUP;
   }
 }

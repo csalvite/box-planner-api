@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Visibility } from '@prisma/client';
 import { BlocksService } from './blocks.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -35,10 +36,71 @@ describe('BlocksService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should return a block when it exists and belongs to the user', async () => {
+  it('should create a block in the explicit organization', async () => {
+    const dto = {
+      name: 'Warm Up',
+      description: 'Mobility and footwork',
+      level: 'beginner',
+      categoryId: 1,
+      isPublic: false,
+    };
+
+    const createdBlock = {
+      id: 'block-1',
+      organizationId: 'org-1',
+      createdById: 'user-1',
+      ...dto,
+      visibility: Visibility.PRIVATE,
+    };
+
+    prismaMock.block.create.mockResolvedValue(createdBlock);
+
+    const result = await service.create('user-1', 'org-1', dto);
+
+    expect(prismaMock.block.create).toHaveBeenCalledWith({
+      data: {
+        organizationId: 'org-1',
+        createdById: 'user-1',
+        name: 'Warm Up',
+        description: 'Mobility and footwork',
+        level: 'beginner',
+        visibility: Visibility.PRIVATE,
+        categoryId: 1,
+      },
+    });
+    expect(result).toEqual(createdBlock);
+  });
+
+  it('should list blocks from the explicit organization', async () => {
+    const blocks = [
+      {
+        id: 'block-1',
+        organizationId: 'org-1',
+        createdById: 'user-1',
+        name: 'Warm Up',
+        category: null,
+      },
+    ];
+
+    prismaMock.block.findMany.mockResolvedValue(blocks);
+
+    const result = await service.findAll('org-1');
+
+    expect(prismaMock.block.findMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        category: true,
+      },
+    });
+    expect(result).toEqual(blocks);
+  });
+
+  it('should return a block when it exists in the organization', async () => {
     const block = {
       id: 'block-1',
-      userId: 'user-1',
+      organizationId: 'org-1',
+      createdById: 'user-1',
       name: 'Warm Up',
       category: null,
       exercises: [],
@@ -46,12 +108,12 @@ describe('BlocksService', () => {
 
     prismaMock.block.findFirst.mockResolvedValue(block);
 
-    const result = await service.findOne('block-1', 'user-1');
+    const result = await service.findOne('block-1', 'org-1');
 
     expect(prismaMock.block.findFirst).toHaveBeenCalledWith({
       where: {
         id: 'block-1',
-        userId: 'user-1',
+        organizationId: 'org-1',
       },
       include: {
         category: true,
@@ -67,14 +129,14 @@ describe('BlocksService', () => {
   it('should throw NotFoundException when the block does not exist', async () => {
     prismaMock.block.findFirst.mockResolvedValue(null);
 
-    await expect(service.findOne('block-1', 'user-1')).rejects.toThrow(
+    await expect(service.findOne('block-1', 'org-1')).rejects.toThrow(
       'Block not found',
     );
 
     expect(prismaMock.block.findFirst).toHaveBeenCalledWith({
       where: {
         id: 'block-1',
-        userId: 'user-1',
+        organizationId: 'org-1',
       },
       include: {
         category: true,
@@ -85,10 +147,11 @@ describe('BlocksService', () => {
     });
   });
 
-  it('should update a block when it exists and belongs to the user', async () => {
+  it('should update a block when it exists in the organization', async () => {
     const existingBlock = {
       id: 'block-1',
-      userId: 'user-1',
+      organizationId: 'org-1',
+      createdById: 'user-1',
       name: 'Old Name',
       category: null,
       exercises: [],
@@ -103,23 +166,24 @@ describe('BlocksService', () => {
 
     const updatedBlock = {
       id: 'block-1',
-      userId: 'user-1',
+      organizationId: 'org-1',
+      createdById: 'user-1',
       ...dto,
     };
 
     prismaMock.block.findFirst.mockResolvedValue(existingBlock);
     prismaMock.block.update.mockResolvedValue(updatedBlock);
 
-    const result = await service.update('block-1', 'user-1', dto);
+    const result = await service.update('block-1', 'org-1', dto);
 
     expect(prismaMock.block.findFirst).toHaveBeenCalled();
     expect(prismaMock.block.update).toHaveBeenCalledWith({
-      where: { id: 'block-1' },
+      where: { id: 'block-1', organizationId: 'org-1' },
       data: {
         name: 'New Name',
         description: 'Updated description',
         level: 'beginner',
-        isPublic: true,
+        visibility: Visibility.PUBLIC,
         category: undefined,
       },
     });
@@ -137,14 +201,14 @@ describe('BlocksService', () => {
       isPublic: true,
     };
 
-    await expect(service.update('block-1', 'user-1', dto)).rejects.toThrow(
+    await expect(service.update('block-1', 'org-1', dto)).rejects.toThrow(
       'Block not found',
     );
 
     expect(prismaMock.block.findFirst).toHaveBeenCalledWith({
       where: {
         id: 'block-1',
-        userId: 'user-1',
+        organizationId: 'org-1',
       },
       include: {
         category: true,
@@ -157,10 +221,11 @@ describe('BlocksService', () => {
     expect(prismaMock.block.update).not.toHaveBeenCalled();
   });
 
-  it('should remove a block when it exists and belongs to the user', async () => {
+  it('should remove a block when it exists in the organization', async () => {
     const existingBlock = {
       id: 'block-1',
-      userId: 'user-1',
+      organizationId: 'org-1',
+      createdById: 'user-1',
       name: 'Old Name',
       category: null,
       exercises: [],
@@ -168,18 +233,19 @@ describe('BlocksService', () => {
 
     const deletedBlock = {
       id: 'block-1',
-      userId: 'user-1',
+      organizationId: 'org-1',
+      createdById: 'user-1',
     };
 
     prismaMock.block.findFirst.mockResolvedValue(existingBlock);
     prismaMock.block.delete.mockResolvedValue(deletedBlock);
 
-    const result = await service.remove('block-1', 'user-1');
+    const result = await service.remove('block-1', 'org-1');
 
     expect(prismaMock.block.findFirst).toHaveBeenCalledWith({
       where: {
         id: 'block-1',
-        userId: 'user-1',
+        organizationId: 'org-1',
       },
       include: {
         category: true,
@@ -190,23 +256,23 @@ describe('BlocksService', () => {
     });
 
     expect(prismaMock.block.delete).toHaveBeenCalledWith({
-      where: { id: 'block-1' },
+      where: { id: 'block-1', organizationId: 'org-1' },
     });
 
     expect(result).toEqual(deletedBlock);
   });
 
-  it('should throw NotFoundException and not delete when the block does not exists', async () => {
+  it('should throw NotFoundException and not delete when the block does not exist', async () => {
     prismaMock.block.findFirst.mockResolvedValue(null);
 
-    await expect(service.remove('block-1', 'user-1')).rejects.toThrow(
+    await expect(service.remove('block-1', 'org-1')).rejects.toThrow(
       'Block not found',
     );
 
     expect(prismaMock.block.findFirst).toHaveBeenCalledWith({
       where: {
         id: 'block-1',
-        userId: 'user-1',
+        organizationId: 'org-1',
       },
       include: {
         category: true,

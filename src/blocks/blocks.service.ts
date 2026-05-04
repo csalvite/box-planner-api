@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Visibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { UpdateBlockDto } from './dto/update-block.dto';
@@ -7,24 +8,23 @@ import { UpdateBlockDto } from './dto/update-block.dto';
 export class BlocksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(userId: string, dto: CreateBlockDto) {
+  async create(userId: string, organizationId: string, dto: CreateBlockDto) {
     return this.prisma.block.create({
       data: {
-        userId,
+        organizationId,
+        createdById: userId,
         name: dto.name,
         description: dto.description,
         level: dto.level,
-        isPublic: dto.isPublic ?? false,
-        category: dto.categoryId
-          ? { connect: { id: dto.categoryId } }
-          : undefined,
+        visibility: dto.isPublic ? Visibility.PUBLIC : Visibility.PRIVATE,
+        categoryId: dto.categoryId,
       },
     });
   }
 
-  async findAll(userId: string) {
+  async findAll(organizationId: string) {
     return this.prisma.block.findMany({
-      where: { userId },
+      where: { organizationId },
       orderBy: { createdAt: 'desc' },
       include: {
         category: true,
@@ -32,11 +32,11 @@ export class BlocksService {
     });
   }
 
-  async findOne(id: string, userId: string) {
+  async findOne(id: string, organizationId: string) {
     const block = await this.prisma.block.findFirst({
       where: {
         id,
-        userId,
+        organizationId,
       },
       include: {
         category: true,
@@ -53,16 +53,21 @@ export class BlocksService {
     return block;
   }
 
-  async update(id: string, userId: string, dto: UpdateBlockDto) {
-    await this.findOne(id, userId);
+  async update(id: string, organizationId: string, dto: UpdateBlockDto) {
+    await this.findOne(id, organizationId);
 
     return this.prisma.block.update({
-      where: { id },
+      where: { id, organizationId },
       data: {
         name: dto.name,
         description: dto.description,
         level: dto.level,
-        isPublic: dto.isPublic,
+        visibility:
+          dto.isPublic === undefined
+            ? undefined
+            : dto.isPublic
+              ? Visibility.PUBLIC
+              : Visibility.PRIVATE,
         category: dto.categoryId
           ? { connect: { id: dto.categoryId } }
           : dto.categoryId === null
@@ -72,10 +77,10 @@ export class BlocksService {
     });
   }
 
-  async remove(id: string, userId: string) {
-    await this.findOne(id, userId);
+  async remove(id: string, organizationId: string) {
+    await this.findOne(id, organizationId);
     return this.prisma.block.delete({
-      where: { id },
+      where: { id, organizationId },
     });
   }
 }

@@ -8,83 +8,103 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { TrainingsService } from './trainings.service';
 import { SupabaseAuthGuard } from '../auth/supabase-auth/supabase-auth.guard';
 import { AuthUser } from '../auth/user/user.decorator';
+import { OrganizationId } from '../organizations/decorators/organization-id.decorator';
+import { OrganizationMemberGuard } from '../organizations/guards/organization-member.guard';
 import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
 import { AddBlockToTrainingDto } from './dto/add-block-to-training.dto';
 import { ReorderTrainingBlocksDto } from './dto/reorder-training-blocks.dto';
 
-@UseGuards(SupabaseAuthGuard)
-@Controller('trainings')
+@ApiTags('trainings')
+@ApiBearerAuth()
+@UseGuards(SupabaseAuthGuard, OrganizationMemberGuard)
+@Controller('organizations/:organizationId/trainings')
 export class TrainingsController {
   constructor(private readonly trainingsService: TrainingsService) {}
 
   @Post()
-  create(@AuthUser() user: { id: string }, @Body() dto: CreateTrainingDto) {
-    return this.trainingsService.create(user.id, dto);
+  @ApiOperation({ summary: 'Crear entrenamiento en una organización' })
+  create(
+    @AuthUser() user: { id: string },
+    @OrganizationId() organizationId: string,
+    @Body() dto: CreateTrainingDto,
+  ) {
+    return this.trainingsService.create(user.id, organizationId, dto);
   }
 
   @Get()
-  findAll(@AuthUser() user: { id: string }) {
-    return this.trainingsService.findAll(user.id);
+  @ApiOperation({ summary: 'Listar entrenamientos de una organización' })
+  findAll(@OrganizationId() organizationId: string) {
+    return this.trainingsService.findAll(organizationId);
   }
 
   @Get(':trainingId')
+  @ApiOperation({ summary: 'Obtener entrenamiento por id' })
   findOne(
+    @OrganizationId() organizationId: string,
     @Param('trainingId') trainingId: string,
-    @AuthUser() user: { id: string },
   ) {
-    return this.trainingsService.findOne(trainingId, user.id);
+    return this.trainingsService.findOne(trainingId, organizationId);
   }
 
   @Patch(':trainingId')
+  @ApiOperation({ summary: 'Actualizar entrenamiento' })
   update(
+    @OrganizationId() organizationId: string,
     @Param('trainingId') trainingId: string,
-    @AuthUser() user: { id: string },
     @Body() dto: UpdateTrainingDto,
   ) {
-    return this.trainingsService.update(trainingId, user.id, dto);
+    return this.trainingsService.update(trainingId, organizationId, dto);
   }
 
   @Delete(':trainingId')
+  @ApiOperation({ summary: 'Eliminar entrenamiento' })
   remove(
+    @OrganizationId() organizationId: string,
     @Param('trainingId') trainingId: string,
-    @AuthUser() user: { id: string },
   ) {
-    return this.trainingsService.remove(trainingId, user.id);
+    return this.trainingsService.remove(trainingId, organizationId);
   }
 
-  // --- training blocks ---
   @Post(':trainingId/blocks')
+  @ApiOperation({ summary: 'Añadir bloque a entrenamiento' })
   addBlock(
+    @OrganizationId() organizationId: string,
     @Param('trainingId') trainingId: string,
-    @AuthUser() user: { id: string },
     @Body() dto: AddBlockToTrainingDto,
   ) {
-    return this.trainingsService.addBlock(trainingId, user.id, dto);
+    return this.trainingsService.addBlock(trainingId, organizationId, dto);
+  }
+
+  @Patch(':trainingId/blocks/reorder')
+  @ApiOperation({ summary: 'Reordenar bloques de un entrenamiento' })
+  reorderBlocks(
+    @OrganizationId() organizationId: string,
+    @Param('trainingId') trainingId: string,
+    @Body() dto: ReorderTrainingBlocksDto,
+  ) {
+    return this.trainingsService.reorderBlocks(
+      trainingId,
+      organizationId,
+      dto,
+    );
   }
 
   @Delete(':trainingId/blocks/:trainingBlockId')
+  @ApiOperation({ summary: 'Eliminar bloque de entrenamiento' })
   removeBlock(
+    @OrganizationId() organizationId: string,
     @Param('trainingId') trainingId: string,
     @Param('trainingBlockId') trainingBlockId: string,
-    @AuthUser() user: { id: string },
   ) {
     return this.trainingsService.removeBlock(
       trainingId,
       trainingBlockId,
-      user.id,
+      organizationId,
     );
-  }
-
-  @Patch(':trainingId/blocks/reorder')
-  reorderBlocks(
-    @Param('trainingId') trainingId: string,
-    @AuthUser() user: { id: string },
-    @Body() dto: ReorderTrainingBlocksDto,
-  ) {
-    return this.trainingsService.reorderBlocks(trainingId, user.id, dto);
   }
 }

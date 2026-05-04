@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -16,6 +17,12 @@ describe('AdminController', () => {
         {
           provide: AdminService,
           useValue: adminServiceMock,
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn().mockReturnValue('jwt-secret'),
+          },
         },
       ],
     }).compile();

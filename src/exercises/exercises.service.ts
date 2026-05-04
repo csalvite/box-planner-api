@@ -9,14 +9,11 @@ import { UpdateExerciseDto } from './dto/update-exercise.dto';
 export class ExercisesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Comprobar que el bloque existe y pertenece al usuario (de momento userId fijo)
-   */
-  private async ensureBlockExists(blockId: string, userId: string) {
+  private async ensureBlockExists(blockId: string, organizationId: string) {
     const block = await this.prisma.block.findFirst({
       where: {
         id: blockId,
-        userId,
+        organizationId,
       },
     });
 
@@ -27,9 +24,18 @@ export class ExercisesService {
     return block;
   }
 
-  /**
-   * Recalcula la duración total del bloque en base a sus ejercicios
-   */
+  private async ensureExerciseExists(blockId: string, exerciseId: string) {
+    const exercise = await this.prisma.blockExercise.findFirst({
+      where: { id: exerciseId, blockId },
+    });
+
+    if (!exercise) {
+      throw new NotFoundException('Exercise not found');
+    }
+
+    return exercise;
+  }
+
   private async recalculateBlockDuration(blockId: string) {
     const exercises = await this.prisma.blockExercise.findMany({
       where: { blockId },
@@ -47,8 +53,8 @@ export class ExercisesService {
     });
   }
 
-  async findAll(blockId: string, userId: string) {
-    await this.ensureBlockExists(blockId, userId);
+  async findAll(blockId: string, organizationId: string) {
+    await this.ensureBlockExists(blockId, organizationId);
 
     return this.prisma.blockExercise.findMany({
       where: { blockId },
@@ -56,10 +62,9 @@ export class ExercisesService {
     });
   }
 
-  async create(blockId: string, userId: string, dto: CreateExerciseDto) {
-    await this.ensureBlockExists(blockId, userId);
+  async create(blockId: string, organizationId: string, dto: CreateExerciseDto) {
+    await this.ensureBlockExists(blockId, organizationId);
 
-    // Si no se pasa orderIndex, lo ponemos al final
     let orderIndex = dto.orderIndex;
     if (orderIndex === undefined || orderIndex === null) {
       const count = await this.prisma.blockExercise.count({
@@ -91,18 +96,11 @@ export class ExercisesService {
   async update(
     blockId: string,
     exerciseId: string,
-    userId: string,
+    organizationId: string,
     dto: UpdateExerciseDto,
   ) {
-    await this.ensureBlockExists(blockId, userId);
-
-    const existing = await this.prisma.blockExercise.findFirst({
-      where: { id: exerciseId, blockId },
-    });
-
-    if (!existing) {
-      throw new NotFoundException('Exercise not found');
-    }
+    await this.ensureBlockExists(blockId, organizationId);
+    const existing = await this.ensureExerciseExists(blockId, exerciseId);
 
     const updated = await this.prisma.blockExercise.update({
       where: { id: exerciseId },
@@ -125,16 +123,9 @@ export class ExercisesService {
     return updated;
   }
 
-  async remove(blockId: string, exerciseId: string, userId: string) {
-    await this.ensureBlockExists(blockId, userId);
-
-    const existing = await this.prisma.blockExercise.findFirst({
-      where: { id: exerciseId, blockId },
-    });
-
-    if (!existing) {
-      throw new NotFoundException('Exercise not found');
-    }
+  async remove(blockId: string, exerciseId: string, organizationId: string) {
+    await this.ensureBlockExists(blockId, organizationId);
+    await this.ensureExerciseExists(blockId, exerciseId);
 
     await this.prisma.blockExercise.delete({
       where: { id: exerciseId },
@@ -145,18 +136,41 @@ export class ExercisesService {
     return { success: true };
   }
 
-  async reorder(blockId: string, userId: string, dto: ReorderExercisesDto) {
-    await this.ensureBlockExists(blockId, userId);
+  async reorder(
+    blockId: string,
+    organizationId: string,
+    dto: ReorderExercisesDto,
+  ) {
+    await this.ensureBlockExists(blockId, organizationId);
 
-    // Podemos usar una transacción
-    await this.prisma.$transaction(
-      dto.order.map((item) =>
+    const exerciseIds = dto.order.map((item) => item.exerciseId);
+    const uniqueExerciseIds = [...new Set(exerciseIds)];
+    const existingExercises = await this.prisma.blockExercise.findMany({
+      where: {
+        blockId,
+        id: { in: uniqueExerciseIds },
+      },
+      select: { id: true },
+    });
+
+    if (existingExercises.length !== uniqueExerciseIds.length) {
+      throw new NotFoundException('Exercise not found');
+    }
+
+    await this.prisma.$transaction([
+      ...dto.order.map((item, index) =>
+        this.prisma.blockExercise.update({
+          where: { id: item.exerciseId },
+          data: { orderIndex: -1000000 - index },
+        }),
+      ),
+      ...dto.order.map((item) =>
         this.prisma.blockExercise.update({
           where: { id: item.exerciseId },
           data: { orderIndex: item.orderIndex },
         }),
       ),
-    );
+    ]);
 
     return this.prisma.blockExercise.findMany({
       where: { blockId },

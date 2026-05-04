@@ -10,52 +10,43 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ExercisesService } from './exercises.service';
 import { CreateExerciseDto } from './dto/create-exercise.dto';
 import { UpdateExerciseDto } from './dto/update-exercise.dto';
 import { ReorderExercisesDto } from './dto/reorder-exercises.dto';
-import { AuthUser } from 'src/auth/user/user.decorator';
 import { SupabaseAuthGuard } from 'src/auth/supabase-auth/supabase-auth.guard';
+import { OrganizationId } from 'src/organizations/decorators/organization-id.decorator';
+import { OrganizationMemberGuard } from 'src/organizations/guards/organization-member.guard';
 
-@UseGuards(SupabaseAuthGuard)
-@Controller('blocks/:blockId/exercises')
+@ApiTags('exercises')
+@ApiBearerAuth()
+@UseGuards(SupabaseAuthGuard, OrganizationMemberGuard)
+@Controller('organizations/:organizationId/blocks/:blockId/exercises')
 export class ExercisesController {
   constructor(private readonly exercisesService: ExercisesService) {}
 
   @Get()
-  findAll(@AuthUser() user: { id: string }, @Param('blockId') blockId: string) {
-    return this.exercisesService.findAll(blockId, user.id);
+  @ApiOperation({ summary: 'Listar ejercicios de un bloque' })
+  findAll(
+    @OrganizationId() organizationId: string,
+    @Param('blockId') blockId: string,
+  ) {
+    return this.exercisesService.findAll(blockId, organizationId);
   }
 
   @Post()
+  @ApiOperation({ summary: 'Crear ejercicio en un bloque' })
   create(
-    @AuthUser() user: { id: string },
+    @OrganizationId() organizationId: string,
     @Param('blockId') blockId: string,
     @Body() dto: CreateExerciseDto,
   ) {
-    return this.exercisesService.create(blockId, user.id, dto);
-  }
-
-  @Patch(':exerciseId')
-  update(
-    @AuthUser() user: { id: string },
-    @Param('blockId') blockId: string,
-    @Param('exerciseId') exerciseId: string,
-    @Body() dto: UpdateExerciseDto,
-  ) {
-    return this.exercisesService.update(blockId, exerciseId, user.id, dto);
-  }
-
-  @Delete(':exerciseId')
-  remove(
-    @AuthUser() user: { id: string },
-    @Param('blockId') blockId: string,
-    @Param('exerciseId') exerciseId: string,
-  ) {
-    return this.exercisesService.remove(blockId, exerciseId, user.id);
+    return this.exercisesService.create(blockId, organizationId, dto);
   }
 
   @Patch('reorder')
+  @ApiOperation({ summary: 'Reordenar ejercicios de un bloque' })
   @UsePipes(
     new ValidationPipe({
       whitelist: false,
@@ -64,10 +55,36 @@ export class ExercisesController {
     }),
   )
   reorder(
-    @AuthUser() user: { id: string },
+    @OrganizationId() organizationId: string,
     @Param('blockId') blockId: string,
     @Body() dto: ReorderExercisesDto,
   ) {
-    return this.exercisesService.reorder(blockId, user.id, dto);
+    return this.exercisesService.reorder(blockId, organizationId, dto);
+  }
+
+  @Patch(':exerciseId')
+  @ApiOperation({ summary: 'Actualizar ejercicio' })
+  update(
+    @OrganizationId() organizationId: string,
+    @Param('blockId') blockId: string,
+    @Param('exerciseId') exerciseId: string,
+    @Body() dto: UpdateExerciseDto,
+  ) {
+    return this.exercisesService.update(
+      blockId,
+      exerciseId,
+      organizationId,
+      dto,
+    );
+  }
+
+  @Delete(':exerciseId')
+  @ApiOperation({ summary: 'Eliminar ejercicio' })
+  remove(
+    @OrganizationId() organizationId: string,
+    @Param('blockId') blockId: string,
+    @Param('exerciseId') exerciseId: string,
+  ) {
+    return this.exercisesService.remove(blockId, exerciseId, organizationId);
   }
 }

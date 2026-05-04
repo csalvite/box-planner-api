@@ -7,143 +7,278 @@ datasource db {
   schemas  = ["public", "auth"]
 }
 
-/**
- * Categorías de bloques (calentamiento, técnica, saco...)
- * Tabla real: public.block_categories
- */
-model BlockCategory {
-  id          Int      @id @default(autoincrement())
-  key         String   @unique
-  name        String
-  description String?
+enum OrganizationType {
+  GYM
+  COACH
+  TEAM
+  OTHER
 
-  blocks      Block[]
-
-  @@map("block_categories") // nombre real de la tabla
   @@schema("public")
 }
 
-/**
- * Bloques de entrenamiento
- * Tabla real: public.blocks
- */
-model Block {
-  id                   String           @id @default(uuid()) @db.Uuid
-  userId               String           @map("user_id")      // columna user_id
-  name                 String
-  description          String?
-  level                String?
-  estimatedDurationSec Int              @default(0) @map("estimated_duration_sec")
-  isPublic             Boolean          @default(false) @map("is_public")
-  createdAt            DateTime         @default(now()) @map("created_at")
-  updatedAt            DateTime         @updatedAt @map("updated_at")
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  COACH
+  VIEWER
 
-  categoryId           Int?             @map("category_id")
-  category             BlockCategory?   @relation(fields: [categoryId], references: [id])
-
-  exercises            BlockExercise[]
-  trainingBlocks       TrainingBlock[]
-
-  @@map("blocks")
   @@schema("public")
 }
 
-/**
- * Ejercicios dentro de un bloque
- * Tabla real: public.block_exercises
- */
-model BlockExercise {
-  id           String     @id @default(uuid()) @db.Uuid
-  blockId      String     @map("block_id")
-  name         String
-  description  String?
-  durationSec  Int?       @map("duration_sec")
-  reps         Int?
-  restSec      Int        @default(0) @map("rest_sec")
-  orderIndex   Int        @map("order_index")
-  targetArea   String?    @map("target_area")
-  mediaId      String?    @map("media_id")
-  notes        String?
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+enum MemberStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  REMOVED
 
-  block        Block      @relation(fields: [blockId], references: [id])
-  media        MediaAsset? @relation(fields: [mediaId], references: [id])
-
-  @@map("block_exercises")
   @@schema("public")
 }
 
-/**
- * Media (fotos y vídeos)
- * Tabla real: public.media_assets
- */
-model MediaAsset {
-  id          String           @id @default(uuid()) @db.Uuid
-  userId      String           @map("user_id")
-  url         String
-  type        String           // "image" | "video"
-  title       String?
-  description String?
-  tags        String[]
-  createdAt   DateTime         @default(now()) @map("created_at")
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
 
-  exercises   BlockExercise[]
-
-  @@map("media_assets")
   @@schema("public")
 }
 
-/**
- * Entrenamientos completos
- * Tabla real: public.trainings
- */
-model Training {
-  id               String           @id @default(uuid()) @db.Uuid
-  userId           String           @map("user_id")
-  title            String
-  description      String?
-  trainingType     String           @map("training_type") // "personal" | "group"
-  level            String?
-  groupSizeMin     Int?             @map("group_size_min")
-  groupSizeMax     Int?             @map("group_size_max")
-  totalDurationSec Int              @default(0) @map("total_duration_sec")
-  notes            String?
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
+enum TrainingType {
+  PERSONAL
+  GROUP
 
-  blocks           TrainingBlock[]
-
-  @@map("trainings")
   @@schema("public")
 }
 
-/**
- * Relación entrenamiento ↔ bloques
- * Tabla real: public.training_blocks
- */
-model TrainingBlock {
-  id                String    @id @default(uuid()) @db.Uuid
-  trainingId        String    @map("training_id")
-  blockId           String    @map("block_id")
-  orderIndex        Int       @map("order_index")
-  customDurationSec Int?      @map("custom_duration_sec")
-  notes             String?
+enum MediaType {
+  IMAGE
+  VIDEO
 
-  training          Training  @relation(fields: [trainingId], references: [id])
-  block             Block     @relation(fields: [blockId], references: [id])
+  @@schema("public")
+}
 
-  @@map("training_blocks")
+enum Visibility {
+  PRIVATE
+  ORGANIZATION
+  PUBLIC
+
   @@schema("public")
 }
 
 model Profile {
-  id        String   @id @db.Uuid
-  email     String?  @unique
-  role      String   @default("trainer")
-  createdAt DateTime @default(now()) @map("created_at")
+  id          String   @id @db.Uuid
+  email       String?  @unique
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  memberships         OrganizationMember[]
+  createdBlocks       Block[]      @relation("BlockCreatedBy")
+  createdTrainings    Training[]   @relation("TrainingCreatedBy")
+  createdMedia        MediaAsset[] @relation("MediaCreatedBy")
+  sentInvitations     Invitation[] @relation("InvitationInvitedBy")
+  acceptedInvitations Invitation[] @relation("InvitationAcceptedBy")
 
   @@map("profiles")
   @@schema("public")
 }
 
+model Organization {
+  id        String           @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String           @unique
+  type      OrganizationType @default(GYM)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  members     OrganizationMember[]
+  invitations Invitation[]
+  blocks      Block[]
+  trainings   Training[]
+  mediaAssets MediaAsset[]
+
+  @@map("organizations")
+  @@schema("public")
+}
+
+model OrganizationMember {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  profileId      String           @map("profile_id") @db.Uuid
+  role           OrganizationRole @default(COACH)
+  status         MemberStatus     @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  profile      Profile      @relation(fields: [profileId], references: [id])
+
+  @@unique([organizationId, profileId])
+  @@index([organizationId])
+  @@index([profileId])
+  @@map("organization_members")
+  @@schema("public")
+}
+
+model Invitation {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  email          String
+  role           OrganizationRole @default(COACH)
+  status         InvitationStatus @default(PENDING)
+  token          String           @unique
+  invitedById    String           @map("invited_by_id") @db.Uuid
+  acceptedById   String?          @map("accepted_by_id") @db.Uuid
+  expiresAt      DateTime         @map("expires_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  acceptedAt     DateTime?        @map("accepted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invitedBy    Profile      @relation("InvitationInvitedBy", fields: [invitedById], references: [id])
+  acceptedBy   Profile?     @relation("InvitationAcceptedBy", fields: [acceptedById], references: [id])
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([invitedById])
+  @@index([acceptedById])
+  @@index([organizationId, email, status])
+  @@map("invitations")
+  @@schema("public")
+}
+
+model BlockCategory {
+  id          Int     @id @default(autoincrement())
+  key         String  @unique
+  name        String
+  description String?
+
+  blocks Block[]
+
+  @@map("block_categories")
+  @@schema("public")
+}
+
+model Block {
+  id                   String     @id @default(uuid()) @db.Uuid
+  organizationId       String     @map("organization_id") @db.Uuid
+  createdById          String     @map("created_by_id") @db.Uuid
+  name                 String
+  description          String?
+  level                String?
+  estimatedDurationSec Int        @default(0) @map("estimated_duration_sec")
+  visibility           Visibility @default(PRIVATE)
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+
+  categoryId Int? @map("category_id")
+
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  createdBy      Profile          @relation("BlockCreatedBy", fields: [createdById], references: [id])
+  category       BlockCategory?   @relation(fields: [categoryId], references: [id])
+  exercises      BlockExercise[]
+  trainingBlocks TrainingBlock[]
+
+  @@index([organizationId])
+  @@index([createdById])
+  @@index([categoryId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, visibility])
+  @@map("blocks")
+  @@schema("public")
+}
+
+model BlockExercise {
+  id          String   @id @default(uuid()) @db.Uuid
+  blockId     String   @map("block_id") @db.Uuid
+  name        String
+  description String?
+  durationSec Int?     @map("duration_sec")
+  reps        Int?
+  restSec     Int      @default(0) @map("rest_sec")
+  orderIndex  Int      @map("order_index")
+  targetArea  String?  @map("target_area")
+  mediaId     String?  @map("media_id") @db.Uuid
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  block Block       @relation(fields: [blockId], references: [id])
+  media MediaAsset? @relation(fields: [mediaId], references: [id])
+
+  @@unique([blockId, orderIndex])
+  @@index([blockId])
+  @@index([mediaId])
+  @@map("block_exercises")
+  @@schema("public")
+}
+
+model MediaAsset {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  createdById    String    @map("created_by_id") @db.Uuid
+  url            String
+  type           MediaType
+  title          String?
+  description    String?
+  tags           String[]  @default([])
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  createdBy    Profile         @relation("MediaCreatedBy", fields: [createdById], references: [id])
+  exercises    BlockExercise[]
+
+  @@index([organizationId])
+  @@index([createdById])
+  @@index([type])
+  @@map("media_assets")
+  @@schema("public")
+}
+
+model Training {
+  id               String       @id @default(uuid()) @db.Uuid
+  organizationId   String       @map("organization_id") @db.Uuid
+  createdById      String       @map("created_by_id") @db.Uuid
+  title            String
+  description      String?
+  trainingType     TrainingType @map("training_type")
+  level            String?
+  groupSizeMin     Int?         @map("group_size_min")
+  groupSizeMax     Int?         @map("group_size_max")
+  totalDurationSec Int          @default(0) @map("total_duration_sec")
+  visibility       Visibility   @default(PRIVATE)
+  notes            String?
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  createdBy    Profile         @relation("TrainingCreatedBy", fields: [createdById], references: [id])
+  blocks       TrainingBlock[]
+
+  @@index([organizationId])
+  @@index([createdById])
+  @@index([organizationId, updatedAt])
+  @@index([organizationId, trainingType])
+  @@index([organizationId, visibility])
+  @@map("trainings")
+  @@schema("public")
+}
+
+model TrainingBlock {
+  id                String  @id @default(uuid()) @db.Uuid
+  trainingId        String  @map("training_id") @db.Uuid
+  blockId           String  @map("block_id") @db.Uuid
+  orderIndex        Int     @map("order_index")
+  customDurationSec Int?    @map("custom_duration_sec")
+  notes             String?
+
+  training Training @relation(fields: [trainingId], references: [id])
+  block    Block    @relation(fields: [blockId], references: [id])
+
+  @@unique([trainingId, orderIndex])
+  @@index([trainingId])
+  @@index([blockId])
+  @@map("training_blocks")
+  @@schema("public")
+}

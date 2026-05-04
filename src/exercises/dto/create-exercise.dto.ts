@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Min, ValidateIf } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateExerciseDto {
   @IsString()
@@ -8,7 +8,6 @@ export class CreateExerciseDto {
   @IsString()
   description?: string;
 
-  // Por tiempo o por repeticiones (uno de los dos, o ambos si quieres)
   @IsOptional()
   @IsInt()
   @Min(1)

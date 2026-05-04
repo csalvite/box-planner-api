@@ -122,6 +122,42 @@ http://localhost:3001
 
 ## 🔑 Login (Postman / Frontend)
 
+## Testing
+
+This project uses automated testing to validate service logic and reduce regressions when business rules change.
+
+### What is used
+
+- Jest as the test runner and assertion library
+- `@nestjs/testing` to create isolated NestJS testing modules
+- Manual mocks for dependencies such as `PrismaService`
+
+### How testing is approached
+
+- Unit tests are the main starting point for service logic
+- Dependencies are mocked so business rules can be tested without a real database
+- Both happy paths and failure paths are covered
+- Ownership and access-control checks are treated as important test cases
+
+### Commands
+
+Run the full test suite:
+`npm run test`
+
+Run tests in watch mode:
+`npm run test:watch`
+
+Generate coverage:
+`npm run test:cov`
+
+Run end-to-end tests:
+`npm run test:e2e`
+
+If PowerShell blocks `npm`, use:
+`npm.cmd run test`
+
+---
+
 POST https://<project-ref>.supabase.co/auth/v1/token?grant_type=password
 
 Headers:

@@ -4,11 +4,14 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
+  constructor(private readonly configService: ConfigService) {}
+
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
     const authHeader = request.headers.authorization;
@@ -26,10 +29,9 @@ export class SupabaseAuthGuard implements CanActivate {
     try {
       const payload = jwt.verify(
         token,
-        process.env.SUPABASE_JWT_SECRET!,
+        this.configService.getOrThrow<string>('SUPABASE_JWT_SECRET'),
       ) as jwt.JwtPayload;
 
-      // Guardamos el usuario en request
       request['user'] = {
         id: payload.sub,
         email: payload.email,
