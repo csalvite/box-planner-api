@@ -28,6 +28,9 @@ export class BlocksService {
       orderBy: { createdAt: 'desc' },
       include: {
         category: true,
+        _count: {
+          select: { exercises: true },
+        },
       },
     });
   }

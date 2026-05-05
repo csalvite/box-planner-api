@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { validateEnv } from './config/env.validation';
+import { BlockCategoriesModule } from './block-categories/block-categories.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { validateEnv } from './config/env.validation';
     AuthModule,
     AdminModule,
     OrganizationsModule,
+    BlockCategoriesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

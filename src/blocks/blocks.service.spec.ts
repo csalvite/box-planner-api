@@ -79,6 +79,9 @@ describe('BlocksService', () => {
         createdById: 'user-1',
         name: 'Warm Up',
         category: null,
+        _count: {
+          exercises: 3,
+        },
       },
     ];
 
@@ -91,6 +94,9 @@ describe('BlocksService', () => {
       orderBy: { createdAt: 'desc' },
       include: {
         category: true,
+        _count: {
+          select: { exercises: true },
+        },
       },
     });
     expect(result).toEqual(blocks);
