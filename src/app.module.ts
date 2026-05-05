@@ -15,6 +15,7 @@ import { validateEnv } from './config/env.validation';
 import { BlockCategoriesModule } from './block-categories/block-categories.module';
 import { ClassSessionsModule } from './class-sessions/class-sessions.module';
 import { StudentModule } from './student/student.module';
+import { InvitationsModule } from './invitations/invitations.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { StudentModule } from './student/student.module';
     BlockCategoriesModule,
     ClassSessionsModule,
     StudentModule,
+    InvitationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
