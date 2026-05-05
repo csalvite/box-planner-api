@@ -13,6 +13,8 @@ import { AdminModule } from './admin/admin.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { validateEnv } from './config/env.validation';
 import { BlockCategoriesModule } from './block-categories/block-categories.module';
+import { ClassSessionsModule } from './class-sessions/class-sessions.module';
+import { StudentModule } from './student/student.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { BlockCategoriesModule } from './block-categories/block-categories.modul
     AdminModule,
     OrganizationsModule,
     BlockCategoriesModule,
+    ClassSessionsModule,
+    StudentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

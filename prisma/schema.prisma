@@ -65,6 +65,22 @@ enum Visibility {
   @@schema("public")
 }
 
+enum ClassSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+
+  @@schema("public")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+
+  @@schema("public")
+}
+
 model Profile {
   id          String   @id @db.Uuid
   email       String?  @unique
@@ -79,6 +95,8 @@ model Profile {
   createdMedia        MediaAsset[] @relation("MediaCreatedBy")
   sentInvitations     Invitation[] @relation("InvitationInvitedBy")
   acceptedInvitations Invitation[] @relation("InvitationAcceptedBy")
+  coachedClassSessions ClassSession[] @relation("ClassSessionCoach")
+  attendances          Attendance[]
 
   @@map("profiles")
   @@schema("public")
@@ -97,6 +115,7 @@ model Organization {
   blocks      Block[]
   trainings   Training[]
   mediaAssets MediaAsset[]
+  classSessions ClassSession[]
 
   @@map("organizations")
   @@schema("public")
@@ -255,6 +274,7 @@ model Training {
   organization Organization    @relation(fields: [organizationId], references: [id])
   createdBy    Profile         @relation("TrainingCreatedBy", fields: [createdById], references: [id])
   blocks       TrainingBlock[]
+  classSessions ClassSession[]
 
   @@index([organizationId])
   @@index([createdById])
@@ -262,6 +282,52 @@ model Training {
   @@index([organizationId, trainingType])
   @@index([organizationId, visibility])
   @@map("trainings")
+  @@schema("public")
+}
+
+model ClassSession {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  trainingId     String             @map("training_id") @db.Uuid
+  coachId        String?            @map("coach_id") @db.Uuid
+  title          String?
+  startsAt       DateTime           @map("starts_at")
+  endsAt         DateTime?          @map("ends_at")
+  status         ClassSessionStatus @default(SCHEDULED)
+  notes          String?
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  training     Training     @relation(fields: [trainingId], references: [id])
+  coach        Profile?     @relation("ClassSessionCoach", fields: [coachId], references: [id])
+  attendances  Attendance[]
+
+  @@index([organizationId])
+  @@index([trainingId])
+  @@index([coachId])
+  @@index([organizationId, startsAt])
+  @@index([organizationId, status])
+  @@map("class_sessions")
+  @@schema("public")
+}
+
+model Attendance {
+  id             String           @id @default(uuid()) @db.Uuid
+  classSessionId String           @map("class_session_id") @db.Uuid
+  profileId      String           @map("profile_id") @db.Uuid
+  status         AttendanceStatus @default(PRESENT)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  classSession ClassSession @relation(fields: [classSessionId], references: [id])
+  profile      Profile      @relation(fields: [profileId], references: [id])
+
+  @@unique([classSessionId, profileId])
+  @@index([classSessionId])
+  @@index([profileId])
+  @@index([profileId, status])
+  @@map("attendances")
   @@schema("public")
 }
 
