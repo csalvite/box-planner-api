@@ -196,6 +196,59 @@ describe('InvitationsService', () => {
     expect(prismaMock.invitation.create).not.toHaveBeenCalled();
   });
 
+  it('should preview an invitation without sensitive fields', async () => {
+    const expiresAt = new Date('2099-05-12T00:00:00.000Z');
+    prismaMock.invitation.findUnique.mockResolvedValue({
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+      status: InvitationStatus.PENDING,
+      expiresAt,
+      organization: {
+        name: 'Box Academy',
+      },
+    });
+
+    const result = await service.preview('token-1');
+
+    expect(prismaMock.invitation.findUnique).toHaveBeenCalledWith({
+      where: { token: 'token-1' },
+      select: {
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        organization: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+    expect(result).toEqual({
+      organizationName: 'Box Academy',
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+      status: InvitationStatus.PENDING,
+      expiresAt,
+    });
+  });
+
+  it('should preview expired pending invitations as expired', async () => {
+    prismaMock.invitation.findUnique.mockResolvedValue({
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+      status: InvitationStatus.PENDING,
+      expiresAt: new Date('2020-05-12T00:00:00.000Z'),
+      organization: {
+        name: 'Box Academy',
+      },
+    });
+
+    const result = await service.preview('token-1');
+
+    expect(result.status).toBe(InvitationStatus.EXPIRED);
+  });
+
   it('should accept an invitation and create membership when missing', async () => {
     const invitation = {
       id: 'invitation-1',
@@ -221,7 +274,7 @@ describe('InvitationsService', () => {
     prismaMock.invitation.update.mockResolvedValue(acceptedInvitation);
 
     const result = await service.accept(
-      { id: 'student-1', email: 'student@example.com' },
+      { id: 'student-1', email: 'Student@Example.com' },
       { token: 'token-1' },
     );
 
@@ -247,6 +300,30 @@ describe('InvitationsService', () => {
     expect(result).toEqual(acceptedInvitation);
   });
 
+  it('should reject accepting with a different email', async () => {
+    const invitation = {
+      id: 'invitation-1',
+      organizationId: 'org-1',
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+      token: 'token-1',
+      status: InvitationStatus.PENDING,
+      expiresAt: new Date('2099-05-12T00:00:00.000Z'),
+    };
+
+    prismaMock.invitation.findUnique.mockResolvedValue(invitation);
+
+    await expect(
+      service.accept(
+        { id: 'student-1', email: 'other@example.com' },
+        { token: 'token-1' },
+      ),
+    ).rejects.toThrow('Invitation email does not match authenticated user');
+
+    expect(authServiceMock.ensureProfile).not.toHaveBeenCalled();
+    expect(prismaMock.organizationMember.create).not.toHaveBeenCalled();
+  });
+
   it('should not create duplicate membership when accepting', async () => {
     const invitation = {
       id: 'invitation-1',
@@ -268,7 +345,10 @@ describe('InvitationsService', () => {
       status: InvitationStatus.ACCEPTED,
     });
 
-    await service.accept({ id: 'student-1' }, { token: 'token-1' });
+    await service.accept(
+      { id: 'student-1', email: 'student@example.com' },
+      { token: 'token-1' },
+    );
 
     expect(prismaMock.organizationMember.create).not.toHaveBeenCalled();
   });

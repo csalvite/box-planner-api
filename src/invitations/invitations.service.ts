@@ -89,6 +89,35 @@ export class InvitationsService {
     });
   }
 
+  async preview(token: string) {
+    const invitation = await this.prisma.invitation.findUnique({
+      where: { token },
+      select: {
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        organization: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    return {
+      organizationName: invitation.organization.name,
+      email: invitation.email,
+      role: invitation.role,
+      status: this.getEffectiveStatus(invitation.status, invitation.expiresAt),
+      expiresAt: invitation.expiresAt,
+    };
+  }
+
   async accept(user: JwtAuthUser, dto: AcceptInvitationDto) {
     const invitation = await this.prisma.invitation.findUnique({
       where: { token: dto.token },
@@ -108,6 +137,12 @@ export class InvitationsService {
         data: { status: InvitationStatus.EXPIRED },
       });
       throw new BadRequestException('Invitation has expired');
+    }
+
+    if (!this.matchesInvitationEmail(user.email, invitation.email)) {
+      throw new ForbiddenException(
+        'Invitation email does not match authenticated user',
+      );
     }
 
     const profile = await this.authService.ensureProfile(user);
@@ -177,6 +212,28 @@ export class InvitationsService {
     return `${frontendUrl.replace(/\/+$/, '')}/invite?token=${encodeURIComponent(
       token,
     )}`;
+  }
+
+  private getEffectiveStatus(status: InvitationStatus, expiresAt: Date) {
+    if (
+      status === InvitationStatus.PENDING &&
+      expiresAt.getTime() < Date.now()
+    ) {
+      return InvitationStatus.EXPIRED;
+    }
+
+    return status;
+  }
+
+  private matchesInvitationEmail(
+    userEmail?: string | null,
+    invitedEmail?: string | null,
+  ) {
+    if (!invitedEmail) {
+      return true;
+    }
+
+    return userEmail?.trim().toLowerCase() === invitedEmail.trim().toLowerCase();
   }
 
   private toPrismaRole(role?: CreateInvitationDto['role']) {
