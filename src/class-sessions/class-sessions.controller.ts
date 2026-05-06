@@ -30,10 +30,15 @@ export class ClassSessionsController {
   @Get()
   @ApiOperation({ summary: 'Listar sesiones de clase de una organizaciÃ³n' })
   findAll(
+    @AuthUser() user: { id: string },
     @OrganizationId() organizationId: string,
     @OrganizationMembership() membership: OrganizationMember,
   ) {
-    return this.classSessionsService.findAll(organizationId, membership);
+    return this.classSessionsService.findAll(
+      user.id,
+      organizationId,
+      membership,
+    );
   }
 
   @Post()
@@ -89,5 +94,37 @@ export class ClassSessionsController {
     @Param('id') id: string,
   ) {
     return this.classSessionsService.remove(id, organizationId, membership);
+  }
+
+  @Post(':id/attendance')
+  @ApiOperation({ summary: 'Marcar asistencia a clase' })
+  markAttendance(
+    @AuthUser() user: { id: string },
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('id') id: string,
+  ) {
+    return this.classSessionsService.markAttendance(
+      user.id,
+      id,
+      organizationId,
+      membership,
+    );
+  }
+
+  @Delete(':id/attendance')
+  @ApiOperation({ summary: 'Cancelar asistencia a clase' })
+  removeAttendance(
+    @AuthUser() user: { id: string },
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('id') id: string,
+  ) {
+    return this.classSessionsService.removeAttendance(
+      user.id,
+      id,
+      organizationId,
+      membership,
+    );
   }
 }

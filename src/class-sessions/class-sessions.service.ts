@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  AttendanceStatus,
   ClassSessionStatus,
   OrganizationMember,
   OrganizationRole,
@@ -12,20 +13,33 @@ import { UpdateClassSessionDto } from './dto/update-class-session.dto';
 export class ClassSessionsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(organizationId: string, membership: OrganizationMember) {
+  async findAll(
+    userId: string,
+    organizationId: string,
+    membership: OrganizationMember,
+  ) {
     this.ensureCanRead(membership);
 
-    return this.prisma.classSession.findMany({
+    const sessions = await this.prisma.classSession.findMany({
       where: { organizationId },
       orderBy: { startsAt: 'asc' },
       include: {
         training: true,
         coach: true,
-        _count: {
-          select: { attendances: true },
+        attendances: {
+          where: { status: AttendanceStatus.PRESENT },
+          select: { profileId: true },
         },
       },
     });
+
+    return sessions.map(({ attendances, ...session }) => ({
+      ...session,
+      attendanceCount: attendances.length,
+      hasCurrentUserAttendance: attendances.some(
+        (attendance) => attendance.profileId === userId,
+      ),
+    }));
   }
 
   async create(
@@ -105,14 +119,60 @@ export class ClassSessionsService {
     this.ensureCanManage(membership);
     await this.ensureClassSessionExists(id, organizationId);
 
-    await this.prisma.attendance.deleteMany({
-      where: { classSessionId: id },
-    });
-    await this.prisma.classSession.delete({
+    return this.prisma.classSession.update({
       where: { id },
+      data: { status: ClassSessionStatus.CANCELLED },
     });
+  }
 
-    return { success: true };
+  async markAttendance(
+    userId: string,
+    id: string,
+    organizationId: string,
+    membership: OrganizationMember,
+  ) {
+    this.ensureCanRead(membership);
+    await this.ensureClassSessionExists(id, organizationId);
+
+    return this.prisma.attendance.upsert({
+      where: {
+        classSessionId_profileId: {
+          classSessionId: id,
+          profileId: userId,
+        },
+      },
+      update: { status: AttendanceStatus.PRESENT },
+      create: {
+        classSessionId: id,
+        profileId: userId,
+        status: AttendanceStatus.PRESENT,
+      },
+    });
+  }
+
+  async removeAttendance(
+    userId: string,
+    id: string,
+    organizationId: string,
+    membership: OrganizationMember,
+  ) {
+    this.ensureCanRead(membership);
+    await this.ensureClassSessionExists(id, organizationId);
+
+    return this.prisma.attendance.upsert({
+      where: {
+        classSessionId_profileId: {
+          classSessionId: id,
+          profileId: userId,
+        },
+      },
+      update: { status: AttendanceStatus.ABSENT },
+      create: {
+        classSessionId: id,
+        profileId: userId,
+        status: AttendanceStatus.ABSENT,
+      },
+    });
   }
 
   private ensureCanManage(membership: OrganizationMember) {

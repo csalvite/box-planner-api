@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClassSessionStatus, MemberStatus, OrganizationRole } from '@prisma/client';
+import {
+  AttendanceStatus,
+  ClassSessionStatus,
+  MemberStatus,
+  OrganizationRole,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassSessionsService } from './class-sessions.service';
 
@@ -12,13 +17,12 @@ describe('ClassSessionsService', () => {
       create: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
-      delete: jest.fn(),
     },
     training: {
       findFirst: jest.fn(),
     },
     attendance: {
-      deleteMany: jest.fn(),
+      upsert: jest.fn(),
     },
   };
 
@@ -49,10 +53,19 @@ describe('ClassSessionsService', () => {
   });
 
   it('should list class sessions for manageable organization members', async () => {
-    const sessions = [{ id: 'session-1', organizationId: 'org-1' }];
+    const sessions = [
+      {
+        id: 'session-1',
+        organizationId: 'org-1',
+        attendances: [
+          { profileId: 'user-1' },
+          { profileId: 'student-2' },
+        ],
+      },
+    ];
     prismaMock.classSession.findMany.mockResolvedValue(sessions);
 
-    const result = await service.findAll('org-1', coachMembership);
+    const result = await service.findAll('user-1', 'org-1', coachMembership);
 
     expect(prismaMock.classSession.findMany).toHaveBeenCalledWith({
       where: { organizationId: 'org-1' },
@@ -60,12 +73,20 @@ describe('ClassSessionsService', () => {
       include: {
         training: true,
         coach: true,
-        _count: {
-          select: { attendances: true },
+        attendances: {
+          where: { status: AttendanceStatus.PRESENT },
+          select: { profileId: true },
         },
       },
     });
-    expect(result).toEqual(sessions);
+    expect(result).toEqual([
+      {
+        id: 'session-1',
+        organizationId: 'org-1',
+        attendanceCount: 2,
+        hasCurrentUserAttendance: true,
+      },
+    ]);
   });
 
   it('should create a class session after validating the training organization', async () => {
@@ -123,5 +144,113 @@ describe('ClassSessionsService', () => {
     ).rejects.toThrow('Class session access denied');
 
     expect(prismaMock.classSession.create).not.toHaveBeenCalled();
+  });
+
+  it('should update a class session after validating organization', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSession.update.mockResolvedValue({
+      id: 'session-1',
+      title: 'Updated class',
+      status: ClassSessionStatus.COMPLETED,
+    });
+
+    const result = await service.update(
+      'session-1',
+      'org-1',
+      coachMembership,
+      {
+        title: 'Updated class',
+        status: 'completed',
+      },
+    );
+
+    expect(prismaMock.classSession.findFirst).toHaveBeenCalledWith({
+      where: { id: 'session-1', organizationId: 'org-1' },
+      select: { id: true },
+    });
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        trainingId: undefined,
+        coachId: undefined,
+        title: 'Updated class',
+        startsAt: undefined,
+        endsAt: undefined,
+        status: ClassSessionStatus.COMPLETED,
+        notes: undefined,
+      },
+    });
+    expect(result).toEqual({
+      id: 'session-1',
+      title: 'Updated class',
+      status: ClassSessionStatus.COMPLETED,
+    });
+  });
+
+  it('should cancel a class session instead of deleting it', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSession.update.mockResolvedValue({
+      id: 'session-1',
+      status: ClassSessionStatus.CANCELLED,
+    });
+
+    const result = await service.remove(
+      'session-1',
+      'org-1',
+      coachMembership,
+    );
+
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: { status: ClassSessionStatus.CANCELLED },
+    });
+    expect(result).toEqual({
+      id: 'session-1',
+      status: ClassSessionStatus.CANCELLED,
+    });
+  });
+
+  it('should let students mark attendance for an organization class', async () => {
+    const viewerMembership = {
+      ...coachMembership,
+      profileId: 'student-1',
+      role: OrganizationRole.VIEWER,
+    };
+    const attendance = {
+      id: 'attendance-1',
+      classSessionId: 'session-1',
+      profileId: 'student-1',
+      status: AttendanceStatus.PRESENT,
+    };
+
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.attendance.upsert.mockResolvedValue(attendance);
+
+    const result = await service.markAttendance(
+      'student-1',
+      'session-1',
+      'org-1',
+      viewerMembership,
+    );
+
+    expect(prismaMock.classSession.findFirst).toHaveBeenCalledWith({
+      where: { id: 'session-1', organizationId: 'org-1' },
+      select: { id: true },
+    });
+    expect(prismaMock.attendance.upsert).toHaveBeenCalledWith({
+      where: {
+        classSessionId_profileId: {
+          classSessionId: 'session-1',
+          profileId: 'student-1',
+        },
+      },
+      update: { status: AttendanceStatus.PRESENT },
+      create: {
+        classSessionId: 'session-1',
+        profileId: 'student-1',
+        status: AttendanceStatus.PRESENT,
+      },
+    });
+    expect(result).toEqual(attendance);
   });
 });
