@@ -5,6 +5,7 @@ import { OrganizationMembersController } from './organization-members.controller
 import { OrganizationMembersService } from './organization-members.service';
 import { OrganizationsController } from './organizations.controller';
 import { OrganizationsService } from './organizations.service';
+import { OrganizationRoleGuard } from './guards/organization-role.guard';
 
 @Module({
   imports: [AuthModule],
@@ -13,7 +14,12 @@ import { OrganizationsService } from './organizations.service';
     OrganizationsService,
     OrganizationMembersService,
     OrganizationMemberGuard,
+    OrganizationRoleGuard,
   ],
-  exports: [OrganizationsService, OrganizationMemberGuard],
+  exports: [
+    OrganizationsService,
+    OrganizationMemberGuard,
+    OrganizationRoleGuard,
+  ],
 })
 export class OrganizationsModule {}

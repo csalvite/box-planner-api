@@ -14,6 +14,7 @@ import { SupabaseAuthGuard } from '../auth/supabase-auth/supabase-auth.guard';
 import { AuthUser } from '../auth/user/user.decorator';
 import { OrganizationId } from '../organizations/decorators/organization-id.decorator';
 import { OrganizationMembership } from '../organizations/decorators/organization-membership.decorator';
+import { OrganizationWriteAccess } from '../organizations/decorators/organization-roles.decorator';
 import { OrganizationMemberGuard } from '../organizations/guards/organization-member.guard';
 import { ClassSessionsService } from './class-sessions.service';
 import { CreateClassSessionDto } from './dto/create-class-session.dto';
@@ -36,6 +37,7 @@ export class ClassSessionsController {
   }
 
   @Post()
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Crear sesiÃ³n de clase' })
   create(
     @AuthUser() user: { id: string },
@@ -62,6 +64,7 @@ export class ClassSessionsController {
   }
 
   @Patch(':id')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Actualizar sesiÃ³n de clase' })
   update(
     @OrganizationId() organizationId: string,
@@ -78,6 +81,7 @@ export class ClassSessionsController {
   }
 
   @Delete(':id')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Eliminar sesiÃ³n de clase' })
   remove(
     @OrganizationId() organizationId: string,

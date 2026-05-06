@@ -13,6 +13,7 @@ import { TrainingsService } from './trainings.service';
 import { SupabaseAuthGuard } from '../auth/supabase-auth/supabase-auth.guard';
 import { AuthUser } from '../auth/user/user.decorator';
 import { OrganizationId } from '../organizations/decorators/organization-id.decorator';
+import { OrganizationWriteAccess } from '../organizations/decorators/organization-roles.decorator';
 import { OrganizationMemberGuard } from '../organizations/guards/organization-member.guard';
 import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
@@ -27,6 +28,7 @@ export class TrainingsController {
   constructor(private readonly trainingsService: TrainingsService) {}
 
   @Post()
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Crear entrenamiento en una organización' })
   create(
     @AuthUser() user: { id: string },
@@ -52,6 +54,7 @@ export class TrainingsController {
   }
 
   @Patch(':trainingId')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Actualizar entrenamiento' })
   update(
     @OrganizationId() organizationId: string,
@@ -62,6 +65,7 @@ export class TrainingsController {
   }
 
   @Delete(':trainingId')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Eliminar entrenamiento' })
   remove(
     @OrganizationId() organizationId: string,
@@ -71,6 +75,7 @@ export class TrainingsController {
   }
 
   @Post(':trainingId/blocks')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Añadir bloque a entrenamiento' })
   addBlock(
     @OrganizationId() organizationId: string,
@@ -81,6 +86,7 @@ export class TrainingsController {
   }
 
   @Patch(':trainingId/blocks/reorder')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Reordenar bloques de un entrenamiento' })
   reorderBlocks(
     @OrganizationId() organizationId: string,
@@ -95,6 +101,7 @@ export class TrainingsController {
   }
 
   @Delete(':trainingId/blocks/:trainingBlockId')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Eliminar bloque de entrenamiento' })
   removeBlock(
     @OrganizationId() organizationId: string,

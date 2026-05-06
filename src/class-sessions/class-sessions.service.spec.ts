@@ -108,16 +108,20 @@ describe('ClassSessionsService', () => {
     expect(result).toEqual(created);
   });
 
-  it('should reject viewers from managing class sessions', async () => {
+  it('should reject viewers from creating class sessions', async () => {
     const viewerMembership = {
       ...coachMembership,
       role: OrganizationRole.VIEWER,
     };
 
     await expect(
-      service.findAll('org-1', viewerMembership),
+      service.create('user-1', 'org-1', viewerMembership, {
+        trainingId: 'training-1',
+        startsAt: '2026-05-06T10:00:00.000Z',
+        title: 'Morning class',
+      }),
     ).rejects.toThrow('Class session access denied');
 
-    expect(prismaMock.classSession.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.classSession.create).not.toHaveBeenCalled();
   });
 });

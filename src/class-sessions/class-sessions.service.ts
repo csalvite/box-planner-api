@@ -13,7 +13,7 @@ export class ClassSessionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(organizationId: string, membership: OrganizationMember) {
-    this.ensureCanManage(membership);
+    this.ensureCanRead(membership);
 
     return this.prisma.classSession.findMany({
       where: { organizationId },
@@ -56,7 +56,7 @@ export class ClassSessionsService {
     organizationId: string,
     membership: OrganizationMember,
   ) {
-    this.ensureCanManage(membership);
+    this.ensureCanRead(membership);
     const session = await this.prisma.classSession.findFirst({
       where: { id, organizationId },
       include: this.trainingTreeInclude(),
@@ -120,6 +120,19 @@ export class ClassSessionsService {
       OrganizationRole.OWNER,
       OrganizationRole.ADMIN,
       OrganizationRole.COACH,
+    ];
+
+    if (!allowedRoles.includes(membership.role)) {
+      throw new ForbiddenException('Class session access denied');
+    }
+  }
+
+  private ensureCanRead(membership: OrganizationMember) {
+    const allowedRoles: OrganizationRole[] = [
+      OrganizationRole.OWNER,
+      OrganizationRole.ADMIN,
+      OrganizationRole.COACH,
+      OrganizationRole.VIEWER,
     ];
 
     if (!allowedRoles.includes(membership.role)) {

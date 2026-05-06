@@ -15,9 +15,10 @@ import { ExercisesService } from './exercises.service';
 import { CreateExerciseDto } from './dto/create-exercise.dto';
 import { UpdateExerciseDto } from './dto/update-exercise.dto';
 import { ReorderExercisesDto } from './dto/reorder-exercises.dto';
-import { SupabaseAuthGuard } from 'src/auth/supabase-auth/supabase-auth.guard';
-import { OrganizationId } from 'src/organizations/decorators/organization-id.decorator';
-import { OrganizationMemberGuard } from 'src/organizations/guards/organization-member.guard';
+import { SupabaseAuthGuard } from '../auth/supabase-auth/supabase-auth.guard';
+import { OrganizationId } from '../organizations/decorators/organization-id.decorator';
+import { OrganizationWriteAccess } from '../organizations/decorators/organization-roles.decorator';
+import { OrganizationMemberGuard } from '../organizations/guards/organization-member.guard';
 
 @ApiTags('exercises')
 @ApiBearerAuth()
@@ -36,6 +37,7 @@ export class ExercisesController {
   }
 
   @Post()
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Crear ejercicio en un bloque' })
   create(
     @OrganizationId() organizationId: string,
@@ -46,6 +48,7 @@ export class ExercisesController {
   }
 
   @Patch('reorder')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Reordenar ejercicios de un bloque' })
   @UsePipes(
     new ValidationPipe({
@@ -63,6 +66,7 @@ export class ExercisesController {
   }
 
   @Patch(':exerciseId')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Actualizar ejercicio' })
   update(
     @OrganizationId() organizationId: string,
@@ -79,6 +83,7 @@ export class ExercisesController {
   }
 
   @Delete(':exerciseId')
+  @OrganizationWriteAccess()
   @ApiOperation({ summary: 'Eliminar ejercicio' })
   remove(
     @OrganizationId() organizationId: string,
