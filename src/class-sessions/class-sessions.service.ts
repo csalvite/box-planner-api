@@ -37,7 +37,7 @@ export class ClassSessionsService {
         updatedAt: true,
         coach: true,
         attendances: {
-          where: { status: AttendanceStatus.PRESENT },
+          where: { status: AttendanceStatus.ATTENDED },
           select: { profileId: true },
         },
       },
@@ -167,11 +167,11 @@ export class ClassSessionsService {
           profileId: userId,
         },
       },
-      update: { status: AttendanceStatus.PRESENT },
+      update: { status: AttendanceStatus.ATTENDED },
       create: {
         classSessionId: id,
         profileId: userId,
-        status: AttendanceStatus.PRESENT,
+        status: AttendanceStatus.ATTENDED,
       },
     });
   }
@@ -192,11 +192,11 @@ export class ClassSessionsService {
           profileId: userId,
         },
       },
-      update: { status: AttendanceStatus.ABSENT },
+      update: { status: AttendanceStatus.MISSED },
       create: {
         classSessionId: id,
         profileId: userId,
-        status: AttendanceStatus.ABSENT,
+        status: AttendanceStatus.MISSED,
       },
     });
   }

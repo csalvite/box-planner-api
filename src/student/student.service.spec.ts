@@ -165,7 +165,7 @@ describe('StudentService', () => {
     expect(prismaMock.attendance.findMany).toHaveBeenCalledWith({
       where: {
         profileId: 'user-1',
-        status: AttendanceStatus.PRESENT,
+        status: AttendanceStatus.ATTENDED,
         classSession: {
           organizationId: { in: ['org-1'] },
         },

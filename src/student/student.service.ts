@@ -71,7 +71,7 @@ export class StudentService {
     const attendances = await this.prisma.attendance.findMany({
       where: {
         profileId: userId,
-        status: AttendanceStatus.PRESENT,
+        status: AttendanceStatus.ATTENDED,
         classSession: {
           organizationId: { in: organizationIds },
         },

@@ -74,8 +74,8 @@ enum ClassSessionStatus {
 }
 
 enum AttendanceStatus {
-  PRESENT
-  ABSENT
+  ATTENDED
+  MISSED
   EXCUSED
 
   @@schema("public")
@@ -316,9 +316,8 @@ model Attendance {
   id             String           @id @default(uuid()) @db.Uuid
   classSessionId String           @map("class_session_id") @db.Uuid
   profileId      String           @map("profile_id") @db.Uuid
-  status         AttendanceStatus @default(PRESENT)
+  status         AttendanceStatus @default(ATTENDED)
   createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
 
   classSession ClassSession @relation(fields: [classSessionId], references: [id])
   profile      Profile      @relation(fields: [profileId], references: [id])

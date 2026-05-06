@@ -105,7 +105,7 @@ describe('ClassSessionsService', () => {
         updatedAt: true,
         coach: true,
         attendances: {
-          where: { status: AttendanceStatus.PRESENT },
+          where: { status: AttendanceStatus.ATTENDED },
           select: { profileId: true },
         },
       },
@@ -297,7 +297,7 @@ describe('ClassSessionsService', () => {
       id: 'attendance-1',
       classSessionId: 'session-1',
       profileId: 'student-1',
-      status: AttendanceStatus.PRESENT,
+      status: AttendanceStatus.ATTENDED,
     };
 
     prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
@@ -321,11 +321,11 @@ describe('ClassSessionsService', () => {
           profileId: 'student-1',
         },
       },
-      update: { status: AttendanceStatus.PRESENT },
+      update: { status: AttendanceStatus.ATTENDED },
       create: {
         classSessionId: 'session-1',
         profileId: 'student-1',
-        status: AttendanceStatus.PRESENT,
+        status: AttendanceStatus.ATTENDED,
       },
     });
     expect(result).toEqual(attendance);
