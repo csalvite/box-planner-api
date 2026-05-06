@@ -3,6 +3,7 @@ const requiredEnvVars = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_JWT_SECRET',
+  'FRONTEND_URL',
 ];
 
 export function validateEnv(config: Record<string, unknown>) {

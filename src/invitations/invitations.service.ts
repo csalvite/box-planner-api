@@ -2,8 +2,11 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   InvitationStatus,
   MemberStatus,
@@ -16,12 +19,17 @@ import type { JwtAuthUser } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
+import { InvitationsEmailService } from './invitations-email.service';
 
 @Injectable()
 export class InvitationsService {
+  private readonly logger = new Logger(InvitationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+    private readonly invitationsEmailService: InvitationsEmailService,
   ) {}
 
   async create(
@@ -31,18 +39,41 @@ export class InvitationsService {
     dto: CreateInvitationDto,
   ) {
     this.ensureCanInvite(membership);
+    const token = this.createToken();
+    const inviteUrl = this.buildInviteUrl(token);
 
-    return this.prisma.invitation.create({
+    const invitation = await this.prisma.invitation.create({
       data: {
         organizationId,
         email: dto.email.toLowerCase(),
         role: this.toPrismaRole(dto.role),
         status: InvitationStatus.PENDING,
-        token: this.createToken(),
+        token,
         invitedById: userId,
         expiresAt: this.createExpiryDate(),
       },
     });
+
+    let emailSent = false;
+
+    try {
+      emailSent = await this.invitationsEmailService.sendInvitationEmail({
+        to: invitation.email,
+        inviteUrl,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Invitation email could not be sent for ${invitation.id}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
+
+    return {
+      invitation,
+      inviteUrl,
+      emailSent,
+    };
   }
 
   async findAll(organizationId: string, membership: OrganizationMember) {
@@ -134,6 +165,18 @@ export class InvitationsService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     return expiresAt;
+  }
+
+  private buildInviteUrl(token: string) {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+
+    if (!frontendUrl) {
+      throw new InternalServerErrorException('Frontend URL is not configured');
+    }
+
+    return `${frontendUrl.replace(/\/+$/, '')}/invite?token=${encodeURIComponent(
+      token,
+    )}`;
   }
 
   private toPrismaRole(role?: CreateInvitationDto['role']) {

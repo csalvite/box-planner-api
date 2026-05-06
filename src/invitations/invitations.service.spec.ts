@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import {
   InvitationStatus,
   MemberStatus,
@@ -6,6 +7,7 @@ import {
 } from '@prisma/client';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { InvitationsEmailService } from './invitations-email.service';
 import { InvitationsService } from './invitations.service';
 
 describe('InvitationsService', () => {
@@ -28,6 +30,16 @@ describe('InvitationsService', () => {
     ensureProfile: jest.fn(),
   };
 
+  const configServiceMock = {
+    get: jest.fn((key: string) =>
+      key === 'FRONTEND_URL' ? 'http://localhost:3000' : undefined,
+    ),
+  };
+
+  const invitationsEmailServiceMock = {
+    sendInvitationEmail: jest.fn(),
+  };
+
   const coachMembership = {
     id: 'membership-1',
     organizationId: 'org-1',
@@ -39,7 +51,10 @@ describe('InvitationsService', () => {
   };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    configServiceMock.get.mockImplementation((key: string) =>
+      key === 'FRONTEND_URL' ? 'http://localhost:3000' : undefined,
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -51,6 +66,14 @@ describe('InvitationsService', () => {
         {
           provide: AuthService,
           useValue: authServiceMock,
+        },
+        {
+          provide: ConfigService,
+          useValue: configServiceMock,
+        },
+        {
+          provide: InvitationsEmailService,
+          useValue: invitationsEmailServiceMock,
         },
       ],
     }).compile();
@@ -66,6 +89,7 @@ describe('InvitationsService', () => {
       role: OrganizationRole.VIEWER,
     };
     prismaMock.invitation.create.mockResolvedValue(invitation);
+    invitationsEmailServiceMock.sendInvitationEmail.mockResolvedValue(false);
 
     const result = await service.create('coach-1', 'org-1', coachMembership, {
       email: 'Student@Example.com',
@@ -82,7 +106,64 @@ describe('InvitationsService', () => {
         expiresAt: expect.any(Date),
       },
     });
-    expect(result).toEqual(invitation);
+    expect(invitationsEmailServiceMock.sendInvitationEmail).toHaveBeenCalledWith(
+      {
+        to: 'student@example.com',
+        inviteUrl: expect.stringMatching(
+          /^http:\/\/localhost:3000\/invite\?token=/,
+        ),
+      },
+    );
+    expect(result).toEqual({
+      invitation,
+      inviteUrl: expect.stringMatching(
+        /^http:\/\/localhost:3000\/invite\?token=/,
+      ),
+      emailSent: false,
+    });
+  });
+
+  it('should mark email as sent when invitation email is delivered', async () => {
+    const invitation = {
+      id: 'invitation-1',
+      organizationId: 'org-1',
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+    };
+    prismaMock.invitation.create.mockResolvedValue(invitation);
+    invitationsEmailServiceMock.sendInvitationEmail.mockResolvedValue(true);
+
+    const result = await service.create('coach-1', 'org-1', coachMembership, {
+      email: 'student@example.com',
+    });
+
+    expect(result.emailSent).toBe(true);
+  });
+
+  it('should keep the invitation when sending the email fails', async () => {
+    const invitation = {
+      id: 'invitation-1',
+      organizationId: 'org-1',
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+    };
+    prismaMock.invitation.create.mockResolvedValue(invitation);
+    invitationsEmailServiceMock.sendInvitationEmail.mockRejectedValue(
+      new Error('resend unavailable'),
+    );
+
+    const result = await service.create('coach-1', 'org-1', coachMembership, {
+      email: 'student@example.com',
+    });
+
+    expect(prismaMock.invitation.create).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      invitation,
+      inviteUrl: expect.stringMatching(
+        /^http:\/\/localhost:3000\/invite\?token=/,
+      ),
+      emailSent: false,
+    });
   });
 
   it('should list invitations for manageable organization members', async () => {
