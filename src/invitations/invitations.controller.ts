@@ -4,6 +4,7 @@ import type { JwtAuthUser } from '../auth/auth.service';
 import { SupabaseAuthGuard } from '../auth/supabase-auth/supabase-auth.guard';
 import { AuthUser } from '../auth/user/user.decorator';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
+import { RegisterInvitationDto } from './dto/register-invitation.dto';
 import { InvitationsService } from './invitations.service';
 
 @ApiTags('invitations')
@@ -23,5 +24,11 @@ export class InvitationsController {
   @ApiOperation({ summary: 'Aceptar invitación' })
   accept(@AuthUser() user: JwtAuthUser, @Body() dto: AcceptInvitationDto) {
     return this.invitationsService.accept(user, dto);
+  }
+
+  @Post('register')
+  @ApiOperation({ summary: 'Registrarse desde invitación' })
+  register(@Body() dto: RegisterInvitationDto) {
+    return this.invitationsService.register(dto);
   }
 }

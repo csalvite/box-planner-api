@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { ConflictException } from '@nestjs/common';
 import {
   InvitationStatus,
   MemberStatus,
@@ -7,6 +8,7 @@ import {
 } from '@prisma/client';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { InvitationsAuthService } from './invitations-auth.service';
 import { InvitationsEmailService } from './invitations-email.service';
 import { InvitationsService } from './invitations.service';
 
@@ -24,6 +26,9 @@ describe('InvitationsService', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    profile: {
+      upsert: jest.fn(),
+    },
   };
 
   const authServiceMock = {
@@ -38,6 +43,10 @@ describe('InvitationsService', () => {
 
   const invitationsEmailServiceMock = {
     sendInvitationEmail: jest.fn(),
+  };
+
+  const invitationsAuthServiceMock = {
+    createConfirmedUser: jest.fn(),
   };
 
   const coachMembership = {
@@ -70,6 +79,10 @@ describe('InvitationsService', () => {
         {
           provide: ConfigService,
           useValue: configServiceMock,
+        },
+        {
+          provide: InvitationsAuthService,
+          useValue: invitationsAuthServiceMock,
         },
         {
           provide: InvitationsEmailService,
@@ -322,6 +335,148 @@ describe('InvitationsService', () => {
 
     expect(authServiceMock.ensureProfile).not.toHaveBeenCalled();
     expect(prismaMock.organizationMember.create).not.toHaveBeenCalled();
+  });
+
+  it('should register a new invited user and accept the invitation', async () => {
+    const invitation = {
+      id: 'invitation-1',
+      organizationId: 'org-1',
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+      status: InvitationStatus.PENDING,
+      expiresAt: new Date('2099-05-12T00:00:00.000Z'),
+      organization: {
+        name: 'Box Academy',
+      },
+    };
+
+    prismaMock.invitation.findUnique.mockResolvedValue(invitation);
+    invitationsAuthServiceMock.createConfirmedUser.mockResolvedValue({
+      id: 'student-1',
+      email: 'student@example.com',
+    });
+    prismaMock.profile.upsert.mockResolvedValue({
+      id: 'student-1',
+    });
+    prismaMock.organizationMember.create.mockResolvedValue({
+      id: 'membership-1',
+    });
+    prismaMock.invitation.update.mockResolvedValue({
+      ...invitation,
+      status: InvitationStatus.ACCEPTED,
+    });
+
+    const result = await service.register({
+      token: 'token-1',
+      displayName: ' Student Name ',
+      password: 'password-1',
+    });
+
+    expect(invitationsAuthServiceMock.createConfirmedUser).toHaveBeenCalledWith(
+      {
+        email: 'student@example.com',
+        password: 'password-1',
+        displayName: 'Student Name',
+      },
+    );
+    expect(prismaMock.profile.upsert).toHaveBeenCalledWith({
+      where: { id: 'student-1' },
+      update: {
+        email: 'student@example.com',
+        displayName: 'Student Name',
+      },
+      create: {
+        id: 'student-1',
+        email: 'student@example.com',
+        displayName: 'Student Name',
+      },
+    });
+    expect(prismaMock.organizationMember.create).toHaveBeenCalledWith({
+      data: {
+        organizationId: 'org-1',
+        profileId: 'student-1',
+        role: OrganizationRole.VIEWER,
+        status: MemberStatus.ACTIVE,
+      },
+    });
+    expect(prismaMock.invitation.update).toHaveBeenCalledWith({
+      where: { id: 'invitation-1' },
+      data: {
+        status: InvitationStatus.ACCEPTED,
+        acceptedById: 'student-1',
+        acceptedAt: expect.any(Date),
+      },
+    });
+    expect(result).toEqual({
+      email: 'student@example.com',
+      organizationName: 'Box Academy',
+      role: OrganizationRole.VIEWER,
+    });
+  });
+
+  it('should not update local data when the invited user already exists', async () => {
+    prismaMock.invitation.findUnique.mockResolvedValue({
+      id: 'invitation-1',
+      organizationId: 'org-1',
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+      status: InvitationStatus.PENDING,
+      expiresAt: new Date('2099-05-12T00:00:00.000Z'),
+      organization: {
+        name: 'Box Academy',
+      },
+    });
+    invitationsAuthServiceMock.createConfirmedUser.mockRejectedValue(
+      new ConflictException(
+        'Ya existe una cuenta con este email. Inicia sesión y acepta la invitación.',
+      ),
+    );
+
+    await expect(
+      service.register({
+        token: 'token-1',
+        displayName: 'Student Name',
+        password: 'password-1',
+      }),
+    ).rejects.toThrow(
+      'Ya existe una cuenta con este email. Inicia sesión y acepta la invitación.',
+    );
+
+    expect(prismaMock.profile.upsert).not.toHaveBeenCalled();
+    expect(prismaMock.organizationMember.create).not.toHaveBeenCalled();
+    expect(prismaMock.invitation.update).not.toHaveBeenCalled();
+  });
+
+  it('should expire stale invitations before register', async () => {
+    prismaMock.invitation.findUnique.mockResolvedValue({
+      id: 'invitation-1',
+      organizationId: 'org-1',
+      email: 'student@example.com',
+      role: OrganizationRole.VIEWER,
+      status: InvitationStatus.PENDING,
+      expiresAt: new Date('2020-05-12T00:00:00.000Z'),
+      organization: {
+        name: 'Box Academy',
+      },
+    });
+    prismaMock.invitation.update.mockResolvedValue({
+      id: 'invitation-1',
+      status: InvitationStatus.EXPIRED,
+    });
+
+    await expect(
+      service.register({
+        token: 'token-1',
+        displayName: 'Student Name',
+        password: 'password-1',
+      }),
+    ).rejects.toThrow('Invitation has expired');
+
+    expect(prismaMock.invitation.update).toHaveBeenCalledWith({
+      where: { id: 'invitation-1' },
+      data: { status: InvitationStatus.EXPIRED },
+    });
+    expect(invitationsAuthServiceMock.createConfirmedUser).not.toHaveBeenCalled();
   });
 
   it('should not create duplicate membership when accepting', async () => {

@@ -19,6 +19,8 @@ import type { JwtAuthUser } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
+import { RegisterInvitationDto } from './dto/register-invitation.dto';
+import { InvitationsAuthService } from './invitations-auth.service';
 import { InvitationsEmailService } from './invitations-email.service';
 
 @Injectable()
@@ -29,6 +31,7 @@ export class InvitationsService {
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly invitationsAuthService: InvitationsAuthService,
     private readonly invitationsEmailService: InvitationsEmailService,
   ) {}
 
@@ -178,6 +181,85 @@ export class InvitationsService {
         organization: true,
       },
     });
+  }
+
+  async register(dto: RegisterInvitationDto) {
+    const invitation = await this.prisma.invitation.findUnique({
+      where: { token: dto.token },
+      select: {
+        id: true,
+        organizationId: true,
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        organization: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    if (invitation.status !== InvitationStatus.PENDING) {
+      throw new BadRequestException('Invitation is not pending');
+    }
+
+    if (invitation.expiresAt.getTime() < Date.now()) {
+      await this.prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { status: InvitationStatus.EXPIRED },
+      });
+      throw new BadRequestException('Invitation has expired');
+    }
+
+    const displayName = dto.displayName.trim();
+    const authUser = await this.invitationsAuthService.createConfirmedUser({
+      email: invitation.email,
+      password: dto.password,
+      displayName,
+    });
+
+    await this.prisma.profile.upsert({
+      where: { id: authUser.id },
+      update: {
+        email: invitation.email,
+        displayName,
+      },
+      create: {
+        id: authUser.id,
+        email: invitation.email,
+        displayName,
+      },
+    });
+
+    await this.prisma.organizationMember.create({
+      data: {
+        organizationId: invitation.organizationId,
+        profileId: authUser.id,
+        role: invitation.role,
+        status: MemberStatus.ACTIVE,
+      },
+    });
+
+    await this.prisma.invitation.update({
+      where: { id: invitation.id },
+      data: {
+        status: InvitationStatus.ACCEPTED,
+        acceptedById: authUser.id,
+        acceptedAt: new Date(),
+      },
+    });
+
+    return {
+      email: invitation.email,
+      organizationName: invitation.organization.name,
+      role: invitation.role,
+    };
   }
 
   private ensureCanInvite(membership: OrganizationMember) {
