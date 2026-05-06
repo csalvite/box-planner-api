@@ -23,8 +23,18 @@ export class ClassSessionsService {
     const sessions = await this.prisma.classSession.findMany({
       where: { organizationId },
       orderBy: { startsAt: 'asc' },
-      include: {
-        training: true,
+      select: {
+        id: true,
+        organizationId: true,
+        trainingId: true,
+        coachId: true,
+        title: true,
+        startsAt: true,
+        endsAt: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
         coach: true,
         attendances: {
           where: { status: AttendanceStatus.PRESENT },
@@ -33,8 +43,24 @@ export class ClassSessionsService {
       },
     });
 
+    const trainings = await this.prisma.training.findMany({
+      where: {
+        id: { in: [...new Set(sessions.map((session) => session.trainingId))] },
+        organizationId,
+      },
+    });
+    const trainingsById = new Map(
+      trainings.map((training) => [training.id, training]),
+    );
+
     return sessions.map(({ attendances, ...session }) => ({
-      ...session,
+      id: session.id,
+      title: session.title,
+      startsAt: session.startsAt,
+      endsAt: session.endsAt,
+      status: session.status,
+      notes: session.notes,
+      training: trainingsById.get(session.trainingId) ?? null,
       attendanceCount: attendances.length,
       hasCurrentUserAttendance: attendances.some(
         (attendance) => attendance.profileId === userId,

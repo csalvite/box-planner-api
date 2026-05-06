@@ -20,6 +20,7 @@ describe('ClassSessionsService', () => {
     },
     training: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     attendance: {
       upsert: jest.fn(),
@@ -34,6 +35,12 @@ describe('ClassSessionsService', () => {
     status: MemberStatus.ACTIVE,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+  };
+  const ownerMembership = {
+    ...coachMembership,
+    id: 'membership-owner',
+    profileId: 'owner-1',
+    role: OrganizationRole.OWNER,
   };
 
   beforeEach(async () => {
@@ -52,26 +59,50 @@ describe('ClassSessionsService', () => {
     service = module.get<ClassSessionsService>(ClassSessionsService);
   });
 
-  it('should list class sessions for manageable organization members', async () => {
+  it('should let owners list created class sessions with training and attendance count', async () => {
+    const startsAt = new Date('2026-05-06T10:00:00.000Z');
+    const endsAt = new Date('2026-05-06T11:00:00.000Z');
     const sessions = [
       {
         id: 'session-1',
         organizationId: 'org-1',
+        trainingId: 'training-1',
+        coachId: 'coach-1',
+        title: 'Morning class',
+        startsAt,
+        endsAt,
+        status: ClassSessionStatus.SCHEDULED,
+        notes: 'Bring wraps',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        coach: { id: 'coach-1' },
         attendances: [
-          { profileId: 'user-1' },
+          { profileId: 'owner-1' },
           { profileId: 'student-2' },
         ],
       },
     ];
+    const training = { id: 'training-1', title: 'Basics' };
     prismaMock.classSession.findMany.mockResolvedValue(sessions);
+    prismaMock.training.findMany.mockResolvedValue([training]);
 
-    const result = await service.findAll('user-1', 'org-1', coachMembership);
+    const result = await service.findAll('owner-1', 'org-1', ownerMembership);
 
     expect(prismaMock.classSession.findMany).toHaveBeenCalledWith({
       where: { organizationId: 'org-1' },
       orderBy: { startsAt: 'asc' },
-      include: {
-        training: true,
+      select: {
+        id: true,
+        organizationId: true,
+        trainingId: true,
+        coachId: true,
+        title: true,
+        startsAt: true,
+        endsAt: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
         coach: true,
         attendances: {
           where: { status: AttendanceStatus.PRESENT },
@@ -79,14 +110,60 @@ describe('ClassSessionsService', () => {
         },
       },
     });
+    expect(prismaMock.training.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['training-1'] },
+        organizationId: 'org-1',
+      },
+    });
     expect(result).toEqual([
       {
         id: 'session-1',
-        organizationId: 'org-1',
+        title: 'Morning class',
+        startsAt,
+        endsAt,
+        status: ClassSessionStatus.SCHEDULED,
+        notes: 'Bring wraps',
+        training,
         attendanceCount: 2,
         hasCurrentUserAttendance: true,
       },
     ]);
+  });
+
+  it('should return class sessions with null training when training is missing', async () => {
+    prismaMock.classSession.findMany.mockResolvedValue([
+      {
+        id: 'session-1',
+        organizationId: 'org-1',
+        trainingId: 'missing-training',
+        coachId: null,
+        title: null,
+        startsAt: new Date('2026-05-06T10:00:00.000Z'),
+        endsAt: null,
+        status: ClassSessionStatus.SCHEDULED,
+        notes: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        coach: null,
+        attendances: [],
+      },
+    ]);
+    prismaMock.training.findMany.mockResolvedValue([]);
+
+    const result = await service.findAll('user-1', 'org-1', coachMembership);
+
+    expect(result[0]).toEqual({
+      id: 'session-1',
+      title: null,
+      startsAt: new Date('2026-05-06T10:00:00.000Z'),
+      endsAt: null,
+      status: ClassSessionStatus.SCHEDULED,
+      notes: null,
+      training: null,
+      attendanceCount: 0,
+      hasCurrentUserAttendance: false,
+    });
   });
 
   it('should create a class session after validating the training organization', async () => {

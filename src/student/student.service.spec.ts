@@ -17,6 +17,9 @@ describe('StudentService', () => {
     classSession: {
       findFirst: jest.fn(),
     },
+    training: {
+      findFirst: jest.fn(),
+    },
     attendance: {
       findMany: jest.fn(),
     },
@@ -42,26 +45,29 @@ describe('StudentService', () => {
     const session = {
       id: 'session-1',
       organizationId: 'org-1',
+      trainingId: 'training-1',
       organization: { id: 'org-1', name: 'Box Gym' },
-      training: {
-        id: 'training-1',
-        blocks: [
-          {
-            id: 'training-block-1',
-            orderIndex: 0,
-            block: {
-              id: 'block-1',
-              exercises: [{ id: 'exercise-1', orderIndex: 0 }],
-            },
+    };
+    const training = {
+      id: 'training-1',
+      blocks: [
+        {
+          id: 'training-block-1',
+          orderIndex: 0,
+          block: {
+            id: 'block-1',
+            category: { id: 1, name: 'Warm up' },
+            exercises: [{ id: 'exercise-1', orderIndex: 0 }],
           },
-        ],
-      },
+        },
+      ],
     };
 
     prismaMock.organizationMember.findMany.mockResolvedValue([
       { organizationId: 'org-1' },
     ]);
     prismaMock.classSession.findFirst.mockResolvedValue(session);
+    prismaMock.training.findFirst.mockResolvedValue(training);
 
     const result = await service.getNextSession('user-1');
 
@@ -81,16 +87,21 @@ describe('StudentService', () => {
       orderBy: { startsAt: 'asc' },
       include: {
         organization: true,
-        training: {
+      },
+    });
+    expect(prismaMock.training.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'training-1',
+        organizationId: 'org-1',
+      },
+      include: {
+        blocks: {
+          orderBy: { orderIndex: 'asc' },
           include: {
-            blocks: {
-              orderBy: { orderIndex: 'asc' },
+            block: {
               include: {
-                block: {
-                  include: {
-                    exercises: { orderBy: { orderIndex: 'asc' } },
-                  },
-                },
+                category: true,
+                exercises: { orderBy: { orderIndex: 'asc' } },
               },
             },
           },
@@ -101,9 +112,32 @@ describe('StudentService', () => {
       session: {
         id: 'session-1',
         organizationId: 'org-1',
+        trainingId: 'training-1',
         organization: { id: 'org-1', name: 'Box Gym' },
       },
-      training: session.training,
+      training,
+    });
+  });
+
+  it('should return next session with null training when training is missing', async () => {
+    const session = {
+      id: 'session-1',
+      organizationId: 'org-1',
+      trainingId: 'missing-training',
+      organization: { id: 'org-1', name: 'Box Gym' },
+    };
+
+    prismaMock.organizationMember.findMany.mockResolvedValue([
+      { organizationId: 'org-1' },
+    ]);
+    prismaMock.classSession.findFirst.mockResolvedValue(session);
+    prismaMock.training.findFirst.mockResolvedValue(null);
+
+    const result = await service.getNextSession('user-1');
+
+    expect(result).toEqual({
+      session,
+      training: null,
     });
   });
 

@@ -26,20 +26,6 @@ export class StudentService {
       orderBy: { startsAt: 'asc' },
       include: {
         organization: true,
-        training: {
-          include: {
-            blocks: {
-              orderBy: { orderIndex: 'asc' },
-              include: {
-                block: {
-                  include: {
-                    exercises: { orderBy: { orderIndex: 'asc' } },
-                  },
-                },
-              },
-            },
-          },
-        },
       },
     });
 
@@ -47,7 +33,27 @@ export class StudentService {
       return { session: null, training: null };
     }
 
-    const { training, ...sessionData } = session;
+    const training = await this.prisma.training.findFirst({
+      where: {
+        id: session.trainingId,
+        organizationId: session.organizationId,
+      },
+      include: {
+        blocks: {
+          orderBy: { orderIndex: 'asc' },
+          include: {
+            block: {
+              include: {
+                category: true,
+                exercises: { orderBy: { orderIndex: 'asc' } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const sessionData = session;
     return { session: sessionData, training };
   }
 
