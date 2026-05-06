@@ -116,6 +116,7 @@ model Organization {
   trainings   Training[]
   mediaAssets MediaAsset[]
   classSessions ClassSession[]
+  attendances Attendance[]
 
   @@map("organizations")
   @@schema("public")
@@ -314,15 +315,18 @@ model ClassSession {
 
 model Attendance {
   id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
   classSessionId String           @map("class_session_id") @db.Uuid
   profileId      String           @map("profile_id") @db.Uuid
   status         AttendanceStatus @default(ATTENDED)
   createdAt      DateTime         @default(now()) @map("created_at")
 
+  organization Organization @relation(fields: [organizationId], references: [id])
   classSession ClassSession @relation(fields: [classSessionId], references: [id])
   profile      Profile      @relation(fields: [profileId], references: [id])
 
   @@unique([classSessionId, profileId])
+  @@index([organizationId])
   @@index([classSessionId])
   @@index([profileId])
   @@index([profileId, status])

@@ -160,7 +160,7 @@ export class ClassSessionsService {
     this.ensureCanRead(membership);
     await this.ensureClassSessionExists(id, organizationId);
 
-    return this.prisma.attendance.upsert({
+    const attendance = await this.prisma.attendance.upsert({
       where: {
         classSessionId_profileId: {
           classSessionId: id,
@@ -169,11 +169,18 @@ export class ClassSessionsService {
       },
       update: { status: AttendanceStatus.ATTENDED },
       create: {
+        organizationId,
         classSessionId: id,
         profileId: userId,
         status: AttendanceStatus.ATTENDED,
       },
     });
+
+    return {
+      attendance,
+      attendanceCount: await this.countAttendances(id),
+      hasCurrentUserAttendance: true,
+    };
   }
 
   async removeAttendance(
@@ -185,7 +192,7 @@ export class ClassSessionsService {
     this.ensureCanRead(membership);
     await this.ensureClassSessionExists(id, organizationId);
 
-    return this.prisma.attendance.upsert({
+    const attendance = await this.prisma.attendance.upsert({
       where: {
         classSessionId_profileId: {
           classSessionId: id,
@@ -194,11 +201,18 @@ export class ClassSessionsService {
       },
       update: { status: AttendanceStatus.MISSED },
       create: {
+        organizationId,
         classSessionId: id,
         profileId: userId,
         status: AttendanceStatus.MISSED,
       },
     });
+
+    return {
+      attendance,
+      attendanceCount: await this.countAttendances(id),
+      hasCurrentUserAttendance: false,
+    };
   }
 
   private ensureCanManage(membership: OrganizationMember) {
@@ -253,6 +267,15 @@ export class ClassSessionsService {
     }
 
     return session;
+  }
+
+  private countAttendances(classSessionId: string) {
+    return this.prisma.attendance.count({
+      where: {
+        classSessionId,
+        status: AttendanceStatus.ATTENDED,
+      },
+    });
   }
 
   private toPrismaStatus(status?: 'scheduled' | 'completed' | 'cancelled') {

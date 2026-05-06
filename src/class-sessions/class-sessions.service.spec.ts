@@ -24,6 +24,7 @@ describe('ClassSessionsService', () => {
     },
     attendance: {
       upsert: jest.fn(),
+      count: jest.fn(),
     },
   };
 
@@ -295,6 +296,7 @@ describe('ClassSessionsService', () => {
     };
     const attendance = {
       id: 'attendance-1',
+      organizationId: 'org-1',
       classSessionId: 'session-1',
       profileId: 'student-1',
       status: AttendanceStatus.ATTENDED,
@@ -302,6 +304,7 @@ describe('ClassSessionsService', () => {
 
     prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
     prismaMock.attendance.upsert.mockResolvedValue(attendance);
+    prismaMock.attendance.count.mockResolvedValue(1);
 
     const result = await service.markAttendance(
       'student-1',
@@ -323,11 +326,76 @@ describe('ClassSessionsService', () => {
       },
       update: { status: AttendanceStatus.ATTENDED },
       create: {
+        organizationId: 'org-1',
         classSessionId: 'session-1',
         profileId: 'student-1',
         status: AttendanceStatus.ATTENDED,
       },
     });
-    expect(result).toEqual(attendance);
+    expect(prismaMock.attendance.count).toHaveBeenCalledWith({
+      where: {
+        classSessionId: 'session-1',
+        status: AttendanceStatus.ATTENDED,
+      },
+    });
+    expect(result).toEqual({
+      attendance,
+      attendanceCount: 1,
+      hasCurrentUserAttendance: true,
+    });
+  });
+
+  it('should not duplicate attendance when students confirm twice', async () => {
+    const viewerMembership = {
+      ...coachMembership,
+      profileId: 'student-1',
+      role: OrganizationRole.VIEWER,
+    };
+    const attendance = {
+      id: 'attendance-1',
+      organizationId: 'org-1',
+      classSessionId: 'session-1',
+      profileId: 'student-1',
+      status: AttendanceStatus.ATTENDED,
+    };
+
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.attendance.upsert.mockResolvedValue(attendance);
+    prismaMock.attendance.count.mockResolvedValue(1);
+
+    await service.markAttendance(
+      'student-1',
+      'session-1',
+      'org-1',
+      viewerMembership,
+    );
+    const result = await service.markAttendance(
+      'student-1',
+      'session-1',
+      'org-1',
+      viewerMembership,
+    );
+
+    expect(prismaMock.attendance.upsert).toHaveBeenCalledTimes(2);
+    expect(prismaMock.attendance.upsert).toHaveBeenCalledWith({
+      where: {
+        classSessionId_profileId: {
+          classSessionId: 'session-1',
+          profileId: 'student-1',
+        },
+      },
+      update: { status: AttendanceStatus.ATTENDED },
+      create: {
+        organizationId: 'org-1',
+        classSessionId: 'session-1',
+        profileId: 'student-1',
+        status: AttendanceStatus.ATTENDED,
+      },
+    });
+    expect(result).toEqual({
+      attendance,
+      attendanceCount: 1,
+      hasCurrentUserAttendance: true,
+    });
   });
 });
