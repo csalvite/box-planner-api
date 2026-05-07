@@ -289,7 +289,7 @@ model Training {
 model ClassSession {
   id             String             @id @default(uuid()) @db.Uuid
   organizationId String             @map("organization_id") @db.Uuid
-  trainingId     String             @map("training_id") @db.Uuid
+  trainingId     String?            @map("training_id") @db.Uuid
   coachId        String?            @map("coach_id") @db.Uuid
   title          String?
   startsAt       DateTime           @map("starts_at")
@@ -300,7 +300,7 @@ model ClassSession {
   updatedAt      DateTime           @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  training     Training     @relation(fields: [trainingId], references: [id])
+  training     Training?    @relation(fields: [trainingId], references: [id])
   coach        Profile?     @relation("ClassSessionCoach", fields: [coachId], references: [id])
   attendances  Attendance[]
 

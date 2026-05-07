@@ -167,6 +167,48 @@ describe('ClassSessionsService', () => {
     });
   });
 
+  it('should return class sessions with null training when trainingId is null', async () => {
+    const startsAt = new Date('2026-05-06T10:00:00.000Z');
+    prismaMock.classSession.findMany.mockResolvedValue([
+      {
+        id: 'session-1',
+        organizationId: 'org-1',
+        trainingId: null,
+        coachId: null,
+        title: 'Open mat',
+        startsAt,
+        endsAt: null,
+        status: ClassSessionStatus.SCHEDULED,
+        notes: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        coach: null,
+        attendances: [],
+      },
+    ]);
+    prismaMock.training.findMany.mockResolvedValue([]);
+
+    const result = await service.findAll('user-1', 'org-1', coachMembership);
+
+    expect(prismaMock.training.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: [] },
+        organizationId: 'org-1',
+      },
+    });
+    expect(result[0]).toEqual({
+      id: 'session-1',
+      title: 'Open mat',
+      startsAt,
+      endsAt: null,
+      status: ClassSessionStatus.SCHEDULED,
+      notes: null,
+      training: null,
+      attendanceCount: 0,
+      hasCurrentUserAttendance: false,
+    });
+  });
+
   it('should create a class session after validating the training organization', async () => {
     const dto = {
       trainingId: 'training-1',
@@ -202,6 +244,38 @@ describe('ClassSessionsService', () => {
         endsAt: new Date('2026-05-06T11:00:00.000Z'),
         status: ClassSessionStatus.SCHEDULED,
         notes: 'Bring wraps',
+      },
+    });
+    expect(result).toEqual(created);
+  });
+
+  it('should let coaches create class sessions without trainingId', async () => {
+    const dto = {
+      startsAt: '2026-05-06T10:00:00.000Z',
+      title: 'Open mat',
+    };
+    const created = { id: 'session-1', ...dto, trainingId: null };
+
+    prismaMock.classSession.create.mockResolvedValue(created);
+
+    const result = await service.create(
+      'user-1',
+      'org-1',
+      coachMembership,
+      dto,
+    );
+
+    expect(prismaMock.training.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.classSession.create).toHaveBeenCalledWith({
+      data: {
+        organizationId: 'org-1',
+        trainingId: null,
+        coachId: 'user-1',
+        title: 'Open mat',
+        startsAt: new Date('2026-05-06T10:00:00.000Z'),
+        endsAt: undefined,
+        status: ClassSessionStatus.SCHEDULED,
+        notes: undefined,
       },
     });
     expect(result).toEqual(created);
@@ -262,6 +336,41 @@ describe('ClassSessionsService', () => {
       id: 'session-1',
       title: 'Updated class',
       status: ClassSessionStatus.COMPLETED,
+    });
+  });
+
+  it('should remove trainingId from a class session', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSession.update.mockResolvedValue({
+      id: 'session-1',
+      trainingId: null,
+    });
+
+    const result = await service.update(
+      'session-1',
+      'org-1',
+      coachMembership,
+      {
+        trainingId: null,
+      },
+    );
+
+    expect(prismaMock.training.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        trainingId: null,
+        coachId: undefined,
+        title: undefined,
+        startsAt: undefined,
+        endsAt: undefined,
+        status: undefined,
+        notes: undefined,
+      },
+    });
+    expect(result).toEqual({
+      id: 'session-1',
+      trainingId: null,
     });
   });
 

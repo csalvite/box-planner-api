@@ -1,8 +1,9 @@
 import { IsDateString, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateClassSessionDto {
+  @IsOptional()
   @IsUUID()
-  trainingId: string;
+  trainingId?: string | null;
 
   @IsDateString()
   startsAt: string;

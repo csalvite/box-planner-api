@@ -43,9 +43,17 @@ export class ClassSessionsService {
       },
     });
 
+    const trainingIds = [
+      ...new Set(
+        sessions
+          .map((session) => session.trainingId)
+          .filter((trainingId): trainingId is string => trainingId !== null),
+      ),
+    ];
+
     const trainings = await this.prisma.training.findMany({
       where: {
-        id: { in: [...new Set(sessions.map((session) => session.trainingId))] },
+        id: { in: trainingIds },
         organizationId,
       },
     });
@@ -60,7 +68,9 @@ export class ClassSessionsService {
       endsAt: session.endsAt,
       status: session.status,
       notes: session.notes,
-      training: trainingsById.get(session.trainingId) ?? null,
+      training: session.trainingId
+        ? (trainingsById.get(session.trainingId) ?? null)
+        : null,
       attendanceCount: attendances.length,
       hasCurrentUserAttendance: attendances.some(
         (attendance) => attendance.profileId === userId,
@@ -75,12 +85,15 @@ export class ClassSessionsService {
     dto: CreateClassSessionDto,
   ) {
     this.ensureCanManage(membership);
-    await this.ensureTrainingExists(dto.trainingId, organizationId);
+
+    if (dto.trainingId !== undefined && dto.trainingId !== null) {
+      await this.ensureTrainingExists(dto.trainingId, organizationId);
+    }
 
     return this.prisma.classSession.create({
       data: {
         organizationId,
-        trainingId: dto.trainingId,
+        trainingId: dto.trainingId ?? null,
         coachId: dto.coachId ?? userId,
         title: dto.title,
         startsAt: new Date(dto.startsAt),
@@ -118,7 +131,7 @@ export class ClassSessionsService {
     this.ensureCanManage(membership);
     await this.ensureClassSessionExists(id, organizationId);
 
-    if (dto.trainingId) {
+    if (dto.trainingId !== undefined && dto.trainingId !== null) {
       await this.ensureTrainingExists(dto.trainingId, organizationId);
     }
 

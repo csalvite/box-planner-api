@@ -33,25 +33,27 @@ export class StudentService {
       return { session: null, training: null };
     }
 
-    const training = await this.prisma.training.findFirst({
-      where: {
-        id: session.trainingId,
-        organizationId: session.organizationId,
-      },
-      include: {
-        blocks: {
-          orderBy: { orderIndex: 'asc' },
+    const training = session.trainingId
+      ? await this.prisma.training.findFirst({
+          where: {
+            id: session.trainingId,
+            organizationId: session.organizationId,
+          },
           include: {
-            block: {
+            blocks: {
+              orderBy: { orderIndex: 'asc' },
               include: {
-                category: true,
-                exercises: { orderBy: { orderIndex: 'asc' } },
+                block: {
+                  include: {
+                    category: true,
+                    exercises: { orderBy: { orderIndex: 'asc' } },
+                  },
+                },
               },
             },
           },
-        },
-      },
-    });
+        })
+      : null;
 
     const sessionData = session;
     return { session: sessionData, training };

@@ -141,6 +141,28 @@ describe('StudentService', () => {
     });
   });
 
+  it('should return next session with null training when trainingId is null', async () => {
+    const session = {
+      id: 'session-1',
+      organizationId: 'org-1',
+      trainingId: null,
+      organization: { id: 'org-1', name: 'Box Gym' },
+    };
+
+    prismaMock.organizationMember.findMany.mockResolvedValue([
+      { organizationId: 'org-1' },
+    ]);
+    prismaMock.classSession.findFirst.mockResolvedValue(session);
+
+    const result = await service.getNextSession('user-1');
+
+    expect(prismaMock.training.findFirst).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      session,
+      training: null,
+    });
+  });
+
   it('should return empty next session state without active memberships', async () => {
     prismaMock.organizationMember.findMany.mockResolvedValue([]);
 
