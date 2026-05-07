@@ -215,7 +215,7 @@ describe('ClassSessionsService', () => {
       startsAt: '2026-05-06T10:00:00.000Z',
       endsAt: '2026-05-06T11:00:00.000Z',
       title: 'Morning class',
-      status: 'scheduled' as const,
+      status: ClassSessionStatus.SCHEDULED,
       notes: 'Bring wraps',
     };
     const created = { id: 'session-1', ...dto };
@@ -312,7 +312,7 @@ describe('ClassSessionsService', () => {
       coachMembership,
       {
         title: 'Updated class',
-        status: 'completed',
+        status: ClassSessionStatus.COMPLETED,
       },
     );
 
@@ -336,6 +336,84 @@ describe('ClassSessionsService', () => {
       id: 'session-1',
       title: 'Updated class',
       status: ClassSessionStatus.COMPLETED,
+    });
+  });
+
+  it('should assign trainingId to a class session without training', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.training.findFirst.mockResolvedValue({ id: 'training-1' });
+    prismaMock.classSession.update.mockResolvedValue({
+      id: 'session-1',
+      trainingId: 'training-1',
+    });
+
+    const result = await service.update(
+      'session-1',
+      'org-1',
+      coachMembership,
+      {
+        trainingId: 'training-1',
+      },
+    );
+
+    expect(prismaMock.training.findFirst).toHaveBeenCalledWith({
+      where: { id: 'training-1', organizationId: 'org-1' },
+      select: { id: true },
+    });
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        trainingId: 'training-1',
+        coachId: undefined,
+        title: undefined,
+        startsAt: undefined,
+        endsAt: undefined,
+        status: undefined,
+        notes: undefined,
+      },
+    });
+    expect(result).toEqual({
+      id: 'session-1',
+      trainingId: 'training-1',
+    });
+  });
+
+  it('should change trainingId on a class session', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.training.findFirst.mockResolvedValue({ id: 'training-2' });
+    prismaMock.classSession.update.mockResolvedValue({
+      id: 'session-1',
+      trainingId: 'training-2',
+    });
+
+    const result = await service.update(
+      'session-1',
+      'org-1',
+      coachMembership,
+      {
+        trainingId: 'training-2',
+      },
+    );
+
+    expect(prismaMock.training.findFirst).toHaveBeenCalledWith({
+      where: { id: 'training-2', organizationId: 'org-1' },
+      select: { id: true },
+    });
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        trainingId: 'training-2',
+        coachId: undefined,
+        title: undefined,
+        startsAt: undefined,
+        endsAt: undefined,
+        status: undefined,
+        notes: undefined,
+      },
+    });
+    expect(result).toEqual({
+      id: 'session-1',
+      trainingId: 'training-2',
     });
   });
 
@@ -372,6 +450,23 @@ describe('ClassSessionsService', () => {
       id: 'session-1',
       trainingId: null,
     });
+  });
+
+  it('should reject trainingId from another organization', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.training.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.update('session-1', 'org-1', coachMembership, {
+        trainingId: 'training-other-org',
+      }),
+    ).rejects.toThrow('Training not found');
+
+    expect(prismaMock.training.findFirst).toHaveBeenCalledWith({
+      where: { id: 'training-other-org', organizationId: 'org-1' },
+      select: { id: true },
+    });
+    expect(prismaMock.classSession.update).not.toHaveBeenCalled();
   });
 
   it('should cancel a class session instead of deleting it', async () => {

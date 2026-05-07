@@ -1,4 +1,38 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateClassSessionDto } from './create-class-session.dto';
+import { ClassSessionStatus } from '@prisma/client';
+import {
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
-export class UpdateClassSessionDto extends PartialType(CreateClassSessionDto) {}
+export class UpdateClassSessionDto {
+  @IsOptional()
+  @IsUUID()
+  trainingId?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  startsAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endsAt?: string;
+
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsUUID()
+  coachId?: string;
+
+  @IsOptional()
+  @IsEnum(ClassSessionStatus)
+  status?: ClassSessionStatus;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}

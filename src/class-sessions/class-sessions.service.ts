@@ -291,16 +291,8 @@ export class ClassSessionsService {
     });
   }
 
-  private toPrismaStatus(status?: 'scheduled' | 'completed' | 'cancelled') {
-    if (status === 'completed') {
-      return ClassSessionStatus.COMPLETED;
-    }
-
-    if (status === 'cancelled') {
-      return ClassSessionStatus.CANCELLED;
-    }
-
-    return ClassSessionStatus.SCHEDULED;
+  private toPrismaStatus(status?: ClassSessionStatus) {
+    return status ?? ClassSessionStatus.SCHEDULED;
   }
 
   private trainingTreeInclude() {

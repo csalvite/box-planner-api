@@ -1,4 +1,11 @@
-import { IsDateString, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { ClassSessionStatus } from '@prisma/client';
+import {
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateClassSessionDto {
   @IsOptional()
@@ -21,8 +28,8 @@ export class CreateClassSessionDto {
   coachId?: string;
 
   @IsOptional()
-  @IsIn(['scheduled', 'completed', 'cancelled'])
-  status?: 'scheduled' | 'completed' | 'cancelled';
+  @IsEnum(ClassSessionStatus)
+  status?: ClassSessionStatus;
 
   @IsOptional()
   @IsString()
