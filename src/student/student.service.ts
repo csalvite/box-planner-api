@@ -22,6 +22,7 @@ export class StudentService {
         organizationId: { in: organizationIds },
         startsAt: { gte: new Date() },
         status: ClassSessionStatus.SCHEDULED,
+        isEnabled: true,
       },
       orderBy: { startsAt: 'asc' },
       include: {

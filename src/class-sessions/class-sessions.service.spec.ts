@@ -7,6 +7,10 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassSessionsService } from './class-sessions.service';
+import {
+  ClassSessionEnabledFilter,
+  ClassSessionListStatus,
+} from './dto/list-class-sessions.dto';
 
 describe('ClassSessionsService', () => {
   let service: ClassSessionsService;
@@ -17,6 +21,7 @@ describe('ClassSessionsService', () => {
       create: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      deleteMany: jest.fn(),
     },
     training: {
       findFirst: jest.fn(),
@@ -25,7 +30,9 @@ describe('ClassSessionsService', () => {
     attendance: {
       upsert: jest.fn(),
       count: jest.fn(),
+      deleteMany: jest.fn(),
     },
+    $transaction: jest.fn((operations) => Promise.all(operations)),
   };
 
   const coachMembership = {
@@ -73,14 +80,12 @@ describe('ClassSessionsService', () => {
         startsAt,
         endsAt,
         status: ClassSessionStatus.SCHEDULED,
+        isEnabled: true,
         notes: 'Bring wraps',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         coach: { id: 'coach-1' },
-        attendances: [
-          { profileId: 'owner-1' },
-          { profileId: 'student-2' },
-        ],
+        attendances: [{ profileId: 'owner-1' }, { profileId: 'student-2' }],
       },
     ];
     const training = { id: 'training-1', title: 'Basics' };
@@ -101,6 +106,7 @@ describe('ClassSessionsService', () => {
         startsAt: true,
         endsAt: true,
         status: true,
+        isEnabled: true,
         notes: true,
         createdAt: true,
         updatedAt: true,
@@ -124,6 +130,7 @@ describe('ClassSessionsService', () => {
         startsAt,
         endsAt,
         status: ClassSessionStatus.SCHEDULED,
+        isEnabled: true,
         notes: 'Bring wraps',
         training,
         attendanceCount: 2,
@@ -143,6 +150,7 @@ describe('ClassSessionsService', () => {
         startsAt: new Date('2026-05-06T10:00:00.000Z'),
         endsAt: null,
         status: ClassSessionStatus.SCHEDULED,
+        isEnabled: true,
         notes: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -160,6 +168,7 @@ describe('ClassSessionsService', () => {
       startsAt: new Date('2026-05-06T10:00:00.000Z'),
       endsAt: null,
       status: ClassSessionStatus.SCHEDULED,
+      isEnabled: true,
       notes: null,
       training: null,
       attendanceCount: 0,
@@ -179,6 +188,7 @@ describe('ClassSessionsService', () => {
         startsAt,
         endsAt: null,
         status: ClassSessionStatus.SCHEDULED,
+        isEnabled: true,
         notes: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -202,10 +212,92 @@ describe('ClassSessionsService', () => {
       startsAt,
       endsAt: null,
       status: ClassSessionStatus.SCHEDULED,
+      isEnabled: true,
       notes: null,
       training: null,
       attendanceCount: 0,
       hasCurrentUserAttendance: false,
+    });
+  });
+
+  it('should filter class sessions by status, enabled, training, date range and search', async () => {
+    prismaMock.classSession.findMany.mockResolvedValue([]);
+    prismaMock.training.findMany.mockResolvedValue([]);
+
+    await service.findAll('user-1', 'org-1', coachMembership, {
+      status: ClassSessionListStatus.COMPLETED,
+      enabled: ClassSessionEnabledFilter.FALSE,
+      trainingId: '11111111-1111-4111-8111-111111111111',
+      from: '2026-05-01T00:00:00.000Z',
+      to: '2026-05-31T23:59:59.999Z',
+      search: 'sparring',
+    });
+
+    expect(prismaMock.classSession.findMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        status: ClassSessionStatus.COMPLETED,
+        isEnabled: false,
+        trainingId: '11111111-1111-4111-8111-111111111111',
+        startsAt: {
+          gte: new Date('2026-05-01T00:00:00.000Z'),
+          lte: new Date('2026-05-31T23:59:59.999Z'),
+        },
+        title: { contains: 'sparring', mode: 'insensitive' },
+      },
+      orderBy: { startsAt: 'asc' },
+      select: {
+        id: true,
+        organizationId: true,
+        trainingId: true,
+        coachId: true,
+        title: true,
+        startsAt: true,
+        endsAt: true,
+        status: true,
+        isEnabled: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
+        coach: true,
+        attendances: {
+          where: { status: AttendanceStatus.ATTENDED },
+          select: { profileId: true },
+        },
+      },
+    });
+  });
+
+  it('should list all class session statuses when status is ALL', async () => {
+    prismaMock.classSession.findMany.mockResolvedValue([]);
+    prismaMock.training.findMany.mockResolvedValue([]);
+
+    await service.findAll('user-1', 'org-1', coachMembership, {
+      status: ClassSessionListStatus.ALL,
+    });
+
+    expect(prismaMock.classSession.findMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1' },
+      orderBy: { startsAt: 'asc' },
+      select: {
+        id: true,
+        organizationId: true,
+        trainingId: true,
+        coachId: true,
+        title: true,
+        startsAt: true,
+        endsAt: true,
+        status: true,
+        isEnabled: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
+        coach: true,
+        attendances: {
+          where: { status: AttendanceStatus.ATTENDED },
+          select: { profileId: true },
+        },
+      },
     });
   });
 
@@ -243,6 +335,7 @@ describe('ClassSessionsService', () => {
         startsAt: new Date('2026-05-06T10:00:00.000Z'),
         endsAt: new Date('2026-05-06T11:00:00.000Z'),
         status: ClassSessionStatus.SCHEDULED,
+        isEnabled: undefined,
         notes: 'Bring wraps',
       },
     });
@@ -275,6 +368,7 @@ describe('ClassSessionsService', () => {
         startsAt: new Date('2026-05-06T10:00:00.000Z'),
         endsAt: undefined,
         status: ClassSessionStatus.SCHEDULED,
+        isEnabled: undefined,
         notes: undefined,
       },
     });
@@ -306,15 +400,10 @@ describe('ClassSessionsService', () => {
       status: ClassSessionStatus.COMPLETED,
     });
 
-    const result = await service.update(
-      'session-1',
-      'org-1',
-      coachMembership,
-      {
-        title: 'Updated class',
-        status: ClassSessionStatus.COMPLETED,
-      },
-    );
+    const result = await service.update('session-1', 'org-1', coachMembership, {
+      title: 'Updated class',
+      status: ClassSessionStatus.COMPLETED,
+    });
 
     expect(prismaMock.classSession.findFirst).toHaveBeenCalledWith({
       where: { id: 'session-1', organizationId: 'org-1' },
@@ -329,6 +418,7 @@ describe('ClassSessionsService', () => {
         startsAt: undefined,
         endsAt: undefined,
         status: ClassSessionStatus.COMPLETED,
+        isEnabled: undefined,
         notes: undefined,
       },
     });
@@ -347,14 +437,9 @@ describe('ClassSessionsService', () => {
       trainingId: 'training-1',
     });
 
-    const result = await service.update(
-      'session-1',
-      'org-1',
-      coachMembership,
-      {
-        trainingId: 'training-1',
-      },
-    );
+    const result = await service.update('session-1', 'org-1', coachMembership, {
+      trainingId: 'training-1',
+    });
 
     expect(prismaMock.training.findFirst).toHaveBeenCalledWith({
       where: { id: 'training-1', organizationId: 'org-1' },
@@ -369,6 +454,7 @@ describe('ClassSessionsService', () => {
         startsAt: undefined,
         endsAt: undefined,
         status: undefined,
+        isEnabled: undefined,
         notes: undefined,
       },
     });
@@ -386,14 +472,9 @@ describe('ClassSessionsService', () => {
       trainingId: 'training-2',
     });
 
-    const result = await service.update(
-      'session-1',
-      'org-1',
-      coachMembership,
-      {
-        trainingId: 'training-2',
-      },
-    );
+    const result = await service.update('session-1', 'org-1', coachMembership, {
+      trainingId: 'training-2',
+    });
 
     expect(prismaMock.training.findFirst).toHaveBeenCalledWith({
       where: { id: 'training-2', organizationId: 'org-1' },
@@ -408,6 +489,7 @@ describe('ClassSessionsService', () => {
         startsAt: undefined,
         endsAt: undefined,
         status: undefined,
+        isEnabled: undefined,
         notes: undefined,
       },
     });
@@ -424,14 +506,9 @@ describe('ClassSessionsService', () => {
       trainingId: null,
     });
 
-    const result = await service.update(
-      'session-1',
-      'org-1',
-      coachMembership,
-      {
-        trainingId: null,
-      },
-    );
+    const result = await service.update('session-1', 'org-1', coachMembership, {
+      trainingId: null,
+    });
 
     expect(prismaMock.training.findFirst).not.toHaveBeenCalled();
     expect(prismaMock.classSession.update).toHaveBeenCalledWith({
@@ -443,6 +520,7 @@ describe('ClassSessionsService', () => {
         startsAt: undefined,
         endsAt: undefined,
         status: undefined,
+        isEnabled: undefined,
         notes: undefined,
       },
     });
@@ -476,11 +554,7 @@ describe('ClassSessionsService', () => {
       status: ClassSessionStatus.CANCELLED,
     });
 
-    const result = await service.remove(
-      'session-1',
-      'org-1',
-      coachMembership,
-    );
+    const result = await service.remove('session-1', 'org-1', coachMembership);
 
     expect(prismaMock.classSession.update).toHaveBeenCalledWith({
       where: { id: 'session-1' },
@@ -490,6 +564,60 @@ describe('ClassSessionsService', () => {
       id: 'session-1',
       status: ClassSessionStatus.CANCELLED,
     });
+  });
+
+  it('should update class session status after validating organization', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSession.update.mockResolvedValue({
+      id: 'session-1',
+      status: ClassSessionStatus.COMPLETED,
+      isEnabled: false,
+    });
+
+    const result = await service.updateStatus(
+      'session-1',
+      'org-1',
+      coachMembership,
+      { status: ClassSessionStatus.COMPLETED, isEnabled: false },
+    );
+
+    expect(prismaMock.classSession.findFirst).toHaveBeenCalledWith({
+      where: { id: 'session-1', organizationId: 'org-1' },
+      select: { id: true },
+    });
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: { status: ClassSessionStatus.COMPLETED, isEnabled: false },
+    });
+    expect(result).toEqual({
+      id: 'session-1',
+      status: ClassSessionStatus.COMPLETED,
+      isEnabled: false,
+    });
+  });
+
+  it('should permanently delete a class session and related attendances', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.attendance.deleteMany.mockResolvedValue({ count: 2 });
+    prismaMock.classSession.deleteMany.mockResolvedValue({ count: 1 });
+
+    const result = await service.hardDelete(
+      'session-1',
+      'org-1',
+      coachMembership,
+    );
+
+    expect(prismaMock.attendance.deleteMany).toHaveBeenCalledWith({
+      where: { classSessionId: 'session-1', organizationId: 'org-1' },
+    });
+    expect(prismaMock.classSession.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'session-1', organizationId: 'org-1' },
+    });
+    expect(prismaMock.$transaction).toHaveBeenCalledWith([
+      expect.any(Promise),
+      expect.any(Promise),
+    ]);
+    expect(result).toEqual({ id: 'session-1', deleted: true });
   });
 
   it('should let students mark attendance for an organization class', async () => {
@@ -506,7 +634,11 @@ describe('ClassSessionsService', () => {
       status: AttendanceStatus.ATTENDED,
     };
 
-    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSession.findFirst.mockResolvedValue({
+      id: 'session-1',
+      status: ClassSessionStatus.SCHEDULED,
+      isEnabled: true,
+    });
     prismaMock.attendance.upsert.mockResolvedValue(attendance);
     prismaMock.attendance.count.mockResolvedValue(1);
 
@@ -519,7 +651,7 @@ describe('ClassSessionsService', () => {
 
     expect(prismaMock.classSession.findFirst).toHaveBeenCalledWith({
       where: { id: 'session-1', organizationId: 'org-1' },
-      select: { id: true },
+      select: { id: true, status: true, isEnabled: true },
     });
     expect(prismaMock.attendance.upsert).toHaveBeenCalledWith({
       where: {
@@ -563,7 +695,11 @@ describe('ClassSessionsService', () => {
       status: AttendanceStatus.ATTENDED,
     };
 
-    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSession.findFirst.mockResolvedValue({
+      id: 'session-1',
+      status: ClassSessionStatus.SCHEDULED,
+      isEnabled: true,
+    });
     prismaMock.attendance.upsert.mockResolvedValue(attendance);
     prismaMock.attendance.count.mockResolvedValue(1);
 
@@ -603,3 +739,4 @@ describe('ClassSessionsService', () => {
     });
   });
 });
+

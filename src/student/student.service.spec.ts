@@ -41,7 +41,7 @@ describe('StudentService', () => {
     service = module.get<StudentService>(StudentService);
   });
 
-  it('should return the next scheduled session with training content', async () => {
+  it('should return the next enabled session with training content', async () => {
     const session = {
       id: 'session-1',
       organizationId: 'org-1',
@@ -83,6 +83,7 @@ describe('StudentService', () => {
         organizationId: { in: ['org-1'] },
         startsAt: { gte: expect.any(Date) },
         status: ClassSessionStatus.SCHEDULED,
+        isEnabled: true,
       },
       orderBy: { startsAt: 'asc' },
       include: {
@@ -205,3 +206,4 @@ describe('StudentService', () => {
     });
   });
 });
+

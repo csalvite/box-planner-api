@@ -1,6 +1,7 @@
 import { ClassSessionStatus } from '@prisma/client';
 import {
   IsDateString,
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -30,6 +31,10 @@ export class CreateClassSessionDto {
   @IsOptional()
   @IsEnum(ClassSessionStatus)
   status?: ClassSessionStatus;
+
+  @IsOptional()
+  @IsBoolean()
+  isEnabled?: boolean;
 
   @IsOptional()
   @IsString()

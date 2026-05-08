@@ -27,3 +27,4 @@ describe('UpdateClassSessionDto', () => {
     expect(errors).toHaveLength(0);
   });
 });
+

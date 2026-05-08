@@ -1,13 +1,25 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   AttendanceStatus,
   ClassSessionStatus,
   OrganizationMember,
   OrganizationRole,
+  Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClassSessionDto } from './dto/create-class-session.dto';
+import {
+  ClassSessionEnabledFilter,
+  ClassSessionListStatus,
+  ListClassSessionsDto,
+} from './dto/list-class-sessions.dto';
 import { UpdateClassSessionDto } from './dto/update-class-session.dto';
+import { UpdateClassSessionStatusDto } from './dto/update-class-session-status.dto';
 
 @Injectable()
 export class ClassSessionsService {
@@ -17,11 +29,14 @@ export class ClassSessionsService {
     userId: string,
     organizationId: string,
     membership: OrganizationMember,
+    query: ListClassSessionsDto = {},
   ) {
     this.ensureCanRead(membership);
 
+    const where = this.buildFindAllWhere(organizationId, query);
+
     const sessions = await this.prisma.classSession.findMany({
-      where: { organizationId },
+      where,
       orderBy: { startsAt: 'asc' },
       select: {
         id: true,
@@ -32,6 +47,7 @@ export class ClassSessionsService {
         startsAt: true,
         endsAt: true,
         status: true,
+        isEnabled: true,
         notes: true,
         createdAt: true,
         updatedAt: true,
@@ -67,6 +83,7 @@ export class ClassSessionsService {
       startsAt: session.startsAt,
       endsAt: session.endsAt,
       status: session.status,
+      isEnabled: session.isEnabled,
       notes: session.notes,
       training: session.trainingId
         ? (trainingsById.get(session.trainingId) ?? null)
@@ -99,6 +116,7 @@ export class ClassSessionsService {
         startsAt: new Date(dto.startsAt),
         endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
         status: this.toPrismaStatus(dto.status),
+        isEnabled: dto.isEnabled,
         notes: dto.notes,
       },
     });
@@ -144,7 +162,10 @@ export class ClassSessionsService {
         startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
         endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
         status:
-          dto.status === undefined ? undefined : this.toPrismaStatus(dto.status),
+          dto.status === undefined
+            ? undefined
+            : this.toPrismaStatus(dto.status),
+        isEnabled: dto.isEnabled,
         notes: dto.notes,
       },
     });
@@ -164,6 +185,47 @@ export class ClassSessionsService {
     });
   }
 
+  async updateStatus(
+    id: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: UpdateClassSessionStatusDto,
+  ) {
+    this.ensureCanManage(membership);
+    if (dto.status === undefined && dto.isEnabled === undefined) {
+      throw new BadRequestException('Class session status update is empty');
+    }
+    await this.ensureClassSessionExists(id, organizationId);
+
+    return this.prisma.classSession.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        isEnabled: dto.isEnabled,
+      },
+    });
+  }
+
+  async hardDelete(
+    id: string,
+    organizationId: string,
+    membership: OrganizationMember,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureClassSessionExists(id, organizationId);
+
+    await this.prisma.$transaction([
+      this.prisma.attendance.deleteMany({
+        where: { classSessionId: id, organizationId },
+      }),
+      this.prisma.classSession.deleteMany({
+        where: { id, organizationId },
+      }),
+    ]);
+
+    return { id, deleted: true };
+  }
+
   async markAttendance(
     userId: string,
     id: string,
@@ -171,7 +233,7 @@ export class ClassSessionsService {
     membership: OrganizationMember,
   ) {
     this.ensureCanRead(membership);
-    await this.ensureClassSessionExists(id, organizationId);
+    await this.ensureClassSessionIsBookable(id, organizationId);
 
     const attendance = await this.prisma.attendance.upsert({
       where: {
@@ -282,6 +344,29 @@ export class ClassSessionsService {
     return session;
   }
 
+  private async ensureClassSessionIsBookable(
+    id: string,
+    organizationId: string,
+  ) {
+    const session = await this.prisma.classSession.findFirst({
+      where: { id, organizationId },
+      select: { id: true, status: true, isEnabled: true },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Class session not found');
+    }
+
+    if (
+      session.status !== ClassSessionStatus.SCHEDULED ||
+      !session.isEnabled
+    ) {
+      throw new BadRequestException('Class session is not bookable');
+    }
+
+    return session;
+  }
+
   private countAttendances(classSessionId: string) {
     return this.prisma.attendance.count({
       where: {
@@ -293,6 +378,41 @@ export class ClassSessionsService {
 
   private toPrismaStatus(status?: ClassSessionStatus) {
     return status ?? ClassSessionStatus.SCHEDULED;
+  }
+
+  private buildFindAllWhere(
+    organizationId: string,
+    query: ListClassSessionsDto,
+  ): Prisma.ClassSessionWhereInput {
+    const where: Prisma.ClassSessionWhereInput = { organizationId };
+
+    if (query.status && query.status !== ClassSessionListStatus.ALL) {
+      where.status = query.status;
+    }
+
+    if (query.enabled === ClassSessionEnabledFilter.TRUE) {
+      where.isEnabled = true;
+    } else if (query.enabled === ClassSessionEnabledFilter.FALSE) {
+      where.isEnabled = false;
+    }
+
+    if (query.trainingId) {
+      where.trainingId = query.trainingId;
+    }
+
+    if (query.from || query.to) {
+      where.startsAt = {
+        ...(query.from ? { gte: new Date(query.from) } : {}),
+        ...(query.to ? { lte: new Date(query.to) } : {}),
+      };
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      where.title = { contains: search, mode: 'insensitive' };
+    }
+
+    return where;
   }
 
   private trainingTreeInclude() {

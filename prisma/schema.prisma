@@ -295,6 +295,7 @@ model ClassSession {
   startsAt       DateTime           @map("starts_at")
   endsAt         DateTime?          @map("ends_at")
   status         ClassSessionStatus @default(SCHEDULED)
+  isEnabled      Boolean            @default(true) @map("is_enabled")
   notes          String?
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")

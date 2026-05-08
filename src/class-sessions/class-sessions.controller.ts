@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -18,7 +19,9 @@ import { OrganizationWriteAccess } from '../organizations/decorators/organizatio
 import { OrganizationMemberGuard } from '../organizations/guards/organization-member.guard';
 import { ClassSessionsService } from './class-sessions.service';
 import { CreateClassSessionDto } from './dto/create-class-session.dto';
+import { ListClassSessionsDto } from './dto/list-class-sessions.dto';
 import { UpdateClassSessionDto } from './dto/update-class-session.dto';
+import { UpdateClassSessionStatusDto } from './dto/update-class-session-status.dto';
 
 @ApiTags('class-sessions')
 @ApiBearerAuth()
@@ -33,11 +36,13 @@ export class ClassSessionsController {
     @AuthUser() user: { id: string },
     @OrganizationId() organizationId: string,
     @OrganizationMembership() membership: OrganizationMember,
+    @Query() query: ListClassSessionsDto,
   ) {
     return this.classSessionsService.findAll(
       user.id,
       organizationId,
       membership,
+      query,
     );
   }
 
@@ -78,6 +83,23 @@ export class ClassSessionsController {
     @Body() dto: UpdateClassSessionDto,
   ) {
     return this.classSessionsService.update(
+      id,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Patch(':id/status')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Actualizar estado de una sesiÃƒÂ³n de clase' })
+  updateStatus(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('id') id: string,
+    @Body() dto: UpdateClassSessionStatusDto,
+  ) {
+    return this.classSessionsService.updateStatus(
       id,
       organizationId,
       membership,

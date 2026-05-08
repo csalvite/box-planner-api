@@ -67,6 +67,41 @@ describe('OrganizationMemberGuard', () => {
     expect(request).toEqual({
       params: { organizationId: 'org-1' },
       user: { id: 'user-1' },
+      currentOrganizationId: 'org-1',
+      organizationMembership: membership,
+    });
+  });
+
+  it('should allow active organization members from current organization header', async () => {
+    const membership = {
+      id: 'membership-1',
+      organizationId: 'org-1',
+      profileId: 'user-1',
+      role: OrganizationRole.OWNER,
+      status: MemberStatus.ACTIVE,
+    };
+    const request = {
+      params: {},
+      headers: { 'x-organization-id': 'org-1' },
+      user: { id: 'user-1' },
+    };
+
+    prismaMock.organizationMember.findFirst.mockResolvedValue(membership);
+
+    await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
+
+    expect(prismaMock.organizationMember.findFirst).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        profileId: 'user-1',
+        status: MemberStatus.ACTIVE,
+      },
+    });
+    expect(request).toEqual({
+      params: {},
+      headers: { 'x-organization-id': 'org-1' },
+      user: { id: 'user-1' },
+      currentOrganizationId: 'org-1',
       organizationMembership: membership,
     });
   });

@@ -12,6 +12,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 type OrganizationRequest = Request & {
   user?: JwtAuthUser;
+  currentOrganizationId?: string;
   organizationMembership?: OrganizationMember;
 };
 
@@ -21,7 +22,8 @@ export class OrganizationMemberGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<OrganizationRequest>();
-    const organizationId = request.params.organizationId;
+    const organizationId =
+      request.params?.organizationId ?? this.getOrganizationHeader(request);
     const userId = request.user?.id;
 
     if (!organizationId || !userId) {
@@ -41,6 +43,17 @@ export class OrganizationMemberGuard implements CanActivate {
     }
 
     request.organizationMembership = membership;
+    request.currentOrganizationId = organizationId;
     return true;
+  }
+
+  private getOrganizationHeader(request: OrganizationRequest) {
+    const header = request.headers['x-organization-id'];
+
+    if (Array.isArray(header)) {
+      return header[0];
+    }
+
+    return header;
   }
 }
