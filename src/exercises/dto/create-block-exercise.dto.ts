@@ -1,8 +1,13 @@
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateBlockExerciseDto {
+  @IsOptional()
+  @IsUUID()
+  exerciseId?: string;
+
+  @IsOptional()
   @IsString()
-  name: string;
+  name?: string;
 
   @IsOptional()
   @IsString()

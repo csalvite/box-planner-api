@@ -45,6 +45,7 @@ export class BlocksService {
         category: true,
         exercises: {
           orderBy: { orderIndex: 'asc' },
+          include: { libraryExercise: true },
         },
       },
     });

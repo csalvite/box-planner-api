@@ -17,7 +17,7 @@ model Profile {
   attendances          Attendance[]
   createdBlocks        Block[]              @relation("BlockCreatedBy")
   coachedClassSessions ClassSession[]       @relation("ClassSessionCoach")
-  createdExercises     Exercise[]            @relation("ExerciseCreatedBy")
+  createdExercises     Exercise[]           @relation("ExerciseCreatedBy")
   acceptedInvitations  Invitation[]         @relation("InvitationAcceptedBy")
   sentInvitations      Invitation[]         @relation("InvitationInvitedBy")
   createdMedia         MediaAsset[]         @relation("MediaCreatedBy")
@@ -133,24 +133,27 @@ model Block {
 }
 
 model BlockExercise {
-  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  blockId     String      @map("block_id") @db.Uuid
-  name        String
-  description String?
-  durationSec Int?        @map("duration_sec")
-  reps        Int?
-  restSec     Int         @default(0) @map("rest_sec")
-  orderIndex  Int         @map("order_index")
-  targetArea  String?     @map("target_area")
-  mediaId     String?     @map("media_id") @db.Uuid
-  notes       String?
-  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  block       Block       @relation(fields: [blockId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  media       MediaAsset? @relation(fields: [mediaId], references: [id], onUpdate: NoAction)
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  blockId         String      @map("block_id") @db.Uuid
+  exerciseId      String?     @map("exercise_id") @db.Uuid
+  name            String
+  description     String?
+  durationSec     Int?        @map("duration_sec")
+  reps            Int?
+  restSec         Int         @default(0) @map("rest_sec")
+  orderIndex      Int         @map("order_index")
+  targetArea      String?     @map("target_area")
+  mediaId         String?     @map("media_id") @db.Uuid
+  notes           String?
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  block           Block       @relation(fields: [blockId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  libraryExercise Exercise?   @relation(fields: [exerciseId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  media           MediaAsset? @relation(fields: [mediaId], references: [id], onUpdate: NoAction)
 
   @@unique([blockId, orderIndex])
   @@index([blockId])
+  @@index([exerciseId], map: "idx_block_exercises_exercise_id")
   @@index([mediaId])
   @@map("block_exercises")
   @@schema("public")
@@ -840,32 +843,33 @@ model ExerciseVariant {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Exercise {
-  id                       String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId           String?                     @map("organization_id") @db.Uuid
-  createdByProfileId       String?                     @map("created_by_profile_id") @db.Uuid
-  name                     String
-  shortDescription         String?                     @map("short_description")
-  detailedDescription      String?                     @map("detailed_description")
-  category                 exercise_category           @default(OTHER)
-  mainGoal                 String?                     @map("main_goal")
-  level                    exercise_level              @default(ALL_LEVELS)
-  averageDurationMinutes   Int?                        @map("average_duration_minutes")
-  intensity                exercise_intensity          @default(MEDIUM)
-  recommendedGroupSize     String?                     @map("recommended_group_size")
-  spaceRequired            String?                     @map("space_required")
-  requiresPartner          Boolean                     @default(false) @map("requires_partner")
-  coachNotes               String?                     @map("coach_notes")
-  isGlobal                 Boolean                     @default(false) @map("is_global")
-  isActive                 Boolean                     @default(true) @map("is_active")
-  createdAt                DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  compatibilities          ExerciseCompatibility[]     @relation("ExerciseCompatibilities")
-  relatedCompatibilities   ExerciseCompatibility[]     @relation("RelatedExerciseCompatibilities")
-  exerciseToMaterials      ExerciseToMaterial[]
-  exerciseToTags           ExerciseToTag[]
-  variants                 ExerciseVariant[]
-  createdByProfile         Profile?                    @relation("ExerciseCreatedBy", fields: [createdByProfileId], references: [id], onUpdate: NoAction)
-  organization             Organization?               @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId         String?                 @map("organization_id") @db.Uuid
+  createdByProfileId     String?                 @map("created_by_profile_id") @db.Uuid
+  name                   String
+  shortDescription       String?                 @map("short_description")
+  detailedDescription    String?                 @map("detailed_description")
+  category               exercise_category       @default(OTHER)
+  mainGoal               String?                 @map("main_goal")
+  level                  exercise_level          @default(ALL_LEVELS)
+  averageDurationMinutes Int?                    @map("average_duration_minutes")
+  intensity              exercise_intensity      @default(MEDIUM)
+  recommendedGroupSize   String?                 @map("recommended_group_size")
+  spaceRequired          String?                 @map("space_required")
+  requiresPartner        Boolean                 @default(false) @map("requires_partner")
+  coachNotes             String?                 @map("coach_notes")
+  isGlobal               Boolean                 @default(false) @map("is_global")
+  isActive               Boolean                 @default(true) @map("is_active")
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  blockExercises         BlockExercise[]
+  compatibilities        ExerciseCompatibility[] @relation("ExerciseCompatibilities")
+  relatedCompatibilities ExerciseCompatibility[] @relation("RelatedExerciseCompatibilities")
+  exerciseToMaterials    ExerciseToMaterial[]
+  exerciseToTags         ExerciseToTag[]
+  variants               ExerciseVariant[]
+  createdByProfile       Profile?                @relation("ExerciseCreatedBy", fields: [createdByProfileId], references: [id], onUpdate: NoAction)
+  organization           Organization?           @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([category], map: "idx_exercises_category")
   @@index([intensity], map: "idx_exercises_intensity")

@@ -100,7 +100,14 @@ export class TrainingsService {
         blocks: {
           orderBy: { orderIndex: 'asc' },
           include: {
-            block: true,
+            block: {
+              include: {
+                exercises: {
+                  orderBy: { orderIndex: 'asc' },
+                  include: { libraryExercise: true },
+                },
+              },
+            },
           },
         },
       },
@@ -116,7 +123,10 @@ export class TrainingsService {
           include: {
             block: {
               include: {
-                exercises: { orderBy: { orderIndex: 'asc' } },
+                exercises: {
+                  orderBy: { orderIndex: 'asc' },
+                  include: { libraryExercise: true },
+                },
               },
             },
           },
@@ -251,7 +261,16 @@ export class TrainingsService {
     return this.prisma.trainingBlock.findMany({
       where: { trainingId },
       orderBy: { orderIndex: 'asc' },
-      include: { block: true },
+      include: {
+        block: {
+          include: {
+            exercises: {
+              orderBy: { orderIndex: 'asc' },
+              include: { libraryExercise: true },
+            },
+          },
+        },
+      },
     });
   }
 

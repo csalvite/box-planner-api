@@ -109,7 +109,14 @@ describe('TrainingsService', () => {
         blocks: {
           orderBy: { orderIndex: 'asc' },
           include: {
-            block: true,
+            block: {
+              include: {
+                exercises: {
+                  orderBy: { orderIndex: 'asc' },
+                  include: { libraryExercise: true },
+                },
+              },
+            },
           },
         },
       },
@@ -135,7 +142,10 @@ describe('TrainingsService', () => {
           include: {
             block: {
               include: {
-                exercises: { orderBy: { orderIndex: 'asc' } },
+                exercises: {
+                  orderBy: { orderIndex: 'asc' },
+                  include: { libraryExercise: true },
+                },
               },
             },
           },

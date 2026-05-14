@@ -18,6 +18,9 @@ describe('ExercisesService', () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    exercise: {
+      findFirst: jest.fn(),
+    },
     $transaction: jest.fn(),
   };
 
@@ -61,6 +64,7 @@ describe('ExercisesService', () => {
     expect(prismaMock.blockExercise.findMany).toHaveBeenCalledWith({
       where: { blockId: 'block-1' },
       orderBy: { orderIndex: 'asc' },
+      include: { libraryExercise: true },
     });
     expect(result).toEqual(exercises);
   });
@@ -101,6 +105,7 @@ describe('ExercisesService', () => {
     expect(prismaMock.blockExercise.create).toHaveBeenCalledWith({
       data: {
         blockId: 'block-1',
+        exerciseId: undefined,
         name: 'Jab cross',
         description: undefined,
         durationSec: 30,
@@ -119,10 +124,72 @@ describe('ExercisesService', () => {
     expect(result).toEqual(createdExercise);
   });
 
+  it('should create a block exercise from an accessible library exercise', async () => {
+    const libraryExercise = {
+      id: 'library-exercise-1',
+      name: 'Footwork ladder',
+      shortDescription: 'Fast feet',
+      detailedDescription: null,
+      averageDurationMinutes: 4,
+    };
+    const createdExercise = {
+      id: 'exercise-1',
+      blockId: 'block-1',
+      exerciseId: 'library-exercise-1',
+      name: 'Footwork ladder',
+      description: 'Fast feet',
+      durationSec: 240,
+      restSec: 0,
+      orderIndex: 0,
+    };
+
+    prismaMock.exercise.findFirst.mockResolvedValue(libraryExercise);
+    prismaMock.blockExercise.count.mockResolvedValue(0);
+    prismaMock.blockExercise.create.mockResolvedValue(createdExercise);
+    prismaMock.blockExercise.findMany.mockResolvedValue([
+      { durationSec: 240, restSec: 0 },
+    ]);
+
+    const result = await service.create('block-1', 'org-1', {
+      exerciseId: 'library-exercise-1',
+    });
+
+    expect(prismaMock.exercise.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'library-exercise-1',
+        OR: [{ isGlobal: true }, { organizationId: 'org-1' }],
+      },
+      select: {
+        id: true,
+        name: true,
+        shortDescription: true,
+        detailedDescription: true,
+        averageDurationMinutes: true,
+      },
+    });
+    expect(prismaMock.blockExercise.create).toHaveBeenCalledWith({
+      data: {
+        blockId: 'block-1',
+        exerciseId: 'library-exercise-1',
+        name: 'Footwork ladder',
+        description: 'Fast feet',
+        durationSec: 240,
+        reps: undefined,
+        restSec: 0,
+        orderIndex: 0,
+        targetArea: undefined,
+        mediaId: undefined,
+        notes: undefined,
+      },
+    });
+    expect(result).toEqual(createdExercise);
+  });
+
   it('should update an exercise that belongs to the block', async () => {
     const existingExercise = {
       id: 'exercise-1',
       blockId: 'block-1',
+      exerciseId: null,
       name: 'Old',
       description: null,
       durationSec: 20,
@@ -156,6 +223,7 @@ describe('ExercisesService', () => {
     expect(prismaMock.blockExercise.update).toHaveBeenCalledWith({
       where: { id: 'exercise-1' },
       data: {
+        exerciseId: null,
         name: 'New',
         description: null,
         durationSec: 20,

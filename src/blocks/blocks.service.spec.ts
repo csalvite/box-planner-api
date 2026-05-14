@@ -125,6 +125,7 @@ describe('BlocksService', () => {
         category: true,
         exercises: {
           orderBy: { orderIndex: 'asc' },
+          include: { libraryExercise: true },
         },
       },
     });
@@ -148,6 +149,7 @@ describe('BlocksService', () => {
         category: true,
         exercises: {
           orderBy: { orderIndex: 'asc' },
+          include: { libraryExercise: true },
         },
       },
     });
@@ -220,6 +222,7 @@ describe('BlocksService', () => {
         category: true,
         exercises: {
           orderBy: { orderIndex: 'asc' },
+          include: { libraryExercise: true },
         },
       },
     });
@@ -257,6 +260,7 @@ describe('BlocksService', () => {
         category: true,
         exercises: {
           orderBy: { orderIndex: 'asc' },
+          include: { libraryExercise: true },
         },
       },
     });
@@ -284,6 +288,7 @@ describe('BlocksService', () => {
         category: true,
         exercises: {
           orderBy: { orderIndex: 'asc' },
+          include: { libraryExercise: true },
         },
       },
     });

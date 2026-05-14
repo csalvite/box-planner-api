@@ -424,7 +424,10 @@ export class ClassSessionsService {
             include: {
               block: {
                 include: {
-                  exercises: { orderBy: { orderIndex: 'asc' as const } },
+                  exercises: {
+                    orderBy: { orderIndex: 'asc' as const },
+                    include: { libraryExercise: true },
+                  },
                 },
               },
             },

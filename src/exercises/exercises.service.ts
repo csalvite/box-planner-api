@@ -223,6 +223,7 @@ export class ExercisesService {
     return this.prisma.blockExercise.findMany({
       where: { blockId },
       orderBy: { orderIndex: 'asc' },
+      include: { libraryExercise: true },
     });
   }
 
@@ -232,6 +233,16 @@ export class ExercisesService {
     dto: CreateBlockExerciseDto,
   ) {
     await this.ensureBlockExists(blockId, organizationId);
+    const libraryExercise = dto.exerciseId
+      ? await this.ensureAccessibleLibraryExercise(
+          dto.exerciseId,
+          organizationId,
+        )
+      : null;
+
+    if (!libraryExercise && !dto.name) {
+      throw new BadRequestException('Exercise name is required');
+    }
 
     let orderIndex = dto.orderIndex;
     if (orderIndex === undefined || orderIndex === null) {
@@ -244,9 +255,15 @@ export class ExercisesService {
     const exercise = await this.prisma.blockExercise.create({
       data: {
         blockId,
-        name: dto.name,
-        description: dto.description,
-        durationSec: dto.durationSec,
+        exerciseId: libraryExercise?.id,
+        name: dto.name ?? libraryExercise?.name ?? '',
+        description:
+          dto.description ??
+          libraryExercise?.detailedDescription ??
+          libraryExercise?.shortDescription,
+        durationSec:
+          dto.durationSec ??
+          this.minutesToSeconds(libraryExercise?.averageDurationMinutes),
         reps: dto.reps,
         restSec: dto.restSec ?? 0,
         orderIndex,
@@ -269,13 +286,31 @@ export class ExercisesService {
   ) {
     await this.ensureBlockExists(blockId, organizationId);
     const existing = await this.ensureExerciseExists(blockId, exerciseId);
+    const libraryExercise =
+      dto.exerciseId === undefined
+        ? undefined
+        : dto.exerciseId
+          ? await this.ensureAccessibleLibraryExercise(
+              dto.exerciseId,
+              organizationId,
+            )
+          : null;
 
     const updated = await this.prisma.blockExercise.update({
       where: { id: exerciseId },
       data: {
-        name: dto.name ?? existing.name,
-        description: dto.description ?? existing.description,
-        durationSec: dto.durationSec ?? existing.durationSec,
+        exerciseId:
+          dto.exerciseId === undefined ? existing.exerciseId : dto.exerciseId,
+        name: dto.name ?? libraryExercise?.name ?? existing.name,
+        description:
+          dto.description ??
+          libraryExercise?.detailedDescription ??
+          libraryExercise?.shortDescription ??
+          existing.description,
+        durationSec:
+          dto.durationSec ??
+          this.minutesToSeconds(libraryExercise?.averageDurationMinutes) ??
+          existing.durationSec,
         reps: dto.reps ?? existing.reps,
         restSec: dto.restSec === undefined ? existing.restSec : dto.restSec,
         orderIndex:
@@ -343,6 +378,7 @@ export class ExercisesService {
     return this.prisma.blockExercise.findMany({
       where: { blockId },
       orderBy: { orderIndex: 'asc' },
+      include: { libraryExercise: true },
     });
   }
 
@@ -443,6 +479,31 @@ export class ExercisesService {
     if (exercise.organizationId !== organizationId) {
       throw new NotFoundException('Exercise not found');
     }
+  }
+
+  private async ensureAccessibleLibraryExercise(
+    id: string,
+    organizationId: string,
+  ) {
+    const exercise = await this.prisma.exercise.findFirst({
+      where: {
+        id,
+        OR: [{ isGlobal: true }, { organizationId }],
+      },
+      select: {
+        id: true,
+        name: true,
+        shortDescription: true,
+        detailedDescription: true,
+        averageDurationMinutes: true,
+      },
+    });
+
+    if (!exercise) {
+      throw new NotFoundException('Exercise not found');
+    }
+
+    return exercise;
   }
 
   private async validateAccessibleTagIds(
@@ -561,5 +622,9 @@ export class ExercisesService {
 
   private uniqueIds(ids: string[] | undefined) {
     return [...new Set(ids ?? [])];
+  }
+
+  private minutesToSeconds(minutes: number | null | undefined) {
+    return minutes === null || minutes === undefined ? undefined : minutes * 60;
   }
 }
