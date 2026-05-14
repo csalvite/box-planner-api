@@ -88,6 +88,7 @@ export class StudentService {
 
     const attendedDates = attendances
       .map((attendance) => attendance.classSession.startsAt)
+      .filter((startsAt): startsAt is Date => startsAt !== null)
       .sort((a, b) => b.getTime() - a.getTime());
 
     return {

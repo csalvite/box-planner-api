@@ -7,6 +7,7 @@ import {
 } from 'class-validator';
 
 export enum ClassSessionListStatus {
+  DRAFT = 'DRAFT',
   SCHEDULED = 'SCHEDULED',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',

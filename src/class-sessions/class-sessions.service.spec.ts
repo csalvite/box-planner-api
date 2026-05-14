@@ -42,6 +42,9 @@ describe('ClassSessionsService', () => {
     exercise: {
       findFirst: jest.fn(),
     },
+    organizationMember: {
+      findFirst: jest.fn(),
+    },
     training: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -412,6 +415,45 @@ describe('ClassSessionsService', () => {
     expect(result).toEqual(created);
   });
 
+  it('should let coaches create draft class sessions without dates', async () => {
+    const dto = {
+      title: 'Clase preparada 1',
+    };
+    const created = {
+      id: 'session-1',
+      ...dto,
+      startsAt: null,
+      endsAt: null,
+      status: ClassSessionStatus.DRAFT,
+      trainingId: null,
+    };
+
+    prismaMock.classSession.create.mockResolvedValue(created);
+
+    const result = await service.create(
+      'user-1',
+      'org-1',
+      coachMembership,
+      dto,
+    );
+
+    expect(prismaMock.training.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.classSession.create).toHaveBeenCalledWith({
+      data: {
+        organizationId: 'org-1',
+        trainingId: null,
+        coachId: 'user-1',
+        title: 'Clase preparada 1',
+        startsAt: null,
+        endsAt: undefined,
+        status: ClassSessionStatus.DRAFT,
+        isEnabled: undefined,
+        notes: undefined,
+      },
+    });
+    expect(result).toEqual(created);
+  });
+
   it('should reject viewers from creating class sessions', async () => {
     const viewerMembership = {
       ...coachMembership,
@@ -675,6 +717,7 @@ describe('ClassSessionsService', () => {
       id: 'session-1',
       status: ClassSessionStatus.SCHEDULED,
       isEnabled: true,
+      startsAt: new Date('2026-05-06T10:00:00.000Z'),
     });
     prismaMock.attendance.upsert.mockResolvedValue(attendance);
     prismaMock.attendance.count.mockResolvedValue(1);
@@ -688,7 +731,7 @@ describe('ClassSessionsService', () => {
 
     expect(prismaMock.classSession.findFirst).toHaveBeenCalledWith({
       where: { id: 'session-1', organizationId: 'org-1' },
-      select: { id: true, status: true, isEnabled: true },
+      select: { id: true, status: true, isEnabled: true, startsAt: true },
     });
     expect(prismaMock.attendance.upsert).toHaveBeenCalledWith({
       where: {
@@ -736,6 +779,7 @@ describe('ClassSessionsService', () => {
       id: 'session-1',
       status: ClassSessionStatus.SCHEDULED,
       isEnabled: true,
+      startsAt: new Date('2026-05-06T10:00:00.000Z'),
     });
     prismaMock.attendance.upsert.mockResolvedValue(attendance);
     prismaMock.attendance.count.mockResolvedValue(1);
@@ -812,6 +856,54 @@ describe('ClassSessionsService', () => {
         objective: 'Raise temperature',
         estimatedDurationMinutes: undefined,
         orderIndex: 2,
+        notes: undefined,
+      },
+      include: sectionsSelect.include,
+    });
+    expect(result).toEqual(createdSection);
+  });
+
+  it('should create a section through the root endpoint path without requiring an organization header', async () => {
+    const createdSection = {
+      id: 'section-1',
+      organizationId: 'org-1',
+      classSessionId: 'session-1',
+      name: 'Warmup',
+      orderIndex: 0,
+      exercises: [],
+    };
+
+    prismaMock.classSession.findFirst
+      .mockResolvedValueOnce({ organizationId: 'org-1' })
+      .mockResolvedValueOnce({ id: 'session-1' });
+    prismaMock.organizationMember.findFirst.mockResolvedValue(coachMembership);
+    prismaMock.classSessionSection.count.mockResolvedValue(0);
+    prismaMock.classSessionSection.create.mockResolvedValue(createdSection);
+
+    const result = await service.createSectionForUser(
+      'user-1',
+      'session-1',
+      undefined,
+      {
+        name: 'Warmup',
+      },
+    );
+
+    expect(prismaMock.organizationMember.findFirst).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        profileId: 'user-1',
+        status: MemberStatus.ACTIVE,
+      },
+    });
+    expect(prismaMock.classSessionSection.create).toHaveBeenCalledWith({
+      data: {
+        organizationId: 'org-1',
+        classSessionId: 'session-1',
+        name: 'Warmup',
+        objective: undefined,
+        estimatedDurationMinutes: undefined,
+        orderIndex: 0,
         notes: undefined,
       },
       include: sectionsSelect.include,

@@ -13,16 +13,16 @@ export class CreateClassSessionDto {
   @IsUUID()
   trainingId?: string | null;
 
+  @IsOptional()
   @IsDateString()
-  startsAt: string;
+  startsAt?: string | null;
 
   @IsOptional()
   @IsDateString()
-  endsAt?: string;
+  endsAt?: string | null;
 
-  @IsOptional()
   @IsString()
-  title?: string;
+  title: string;
 
   @IsOptional()
   @IsUUID()

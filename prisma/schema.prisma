@@ -218,7 +218,7 @@ model ClassSession {
   trainingId     String?               @map("training_id") @db.Uuid
   coachId        String?               @map("coach_id") @db.Uuid
   title          String
-  startsAt       DateTime              @map("starts_at") @db.Timestamptz(6)
+  startsAt       DateTime?             @map("starts_at") @db.Timestamptz(6)
   endsAt         DateTime?             @map("ends_at") @db.Timestamptz(6)
   status         ClassSessionStatus    @default(SCHEDULED)
   notes          String?
@@ -1012,6 +1012,7 @@ enum Visibility {
 }
 
 enum ClassSessionStatus {
+  DRAFT
   SCHEDULED
   CANCELLED
   COMPLETED

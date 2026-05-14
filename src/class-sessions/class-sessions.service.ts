@@ -7,6 +7,7 @@ import {
 import {
   AttendanceStatus,
   ClassSessionStatus,
+  MemberStatus,
   OrganizationMember,
   OrganizationRole,
   Prisma,
@@ -120,10 +121,10 @@ export class ClassSessionsService {
         organizationId,
         trainingId: dto.trainingId ?? null,
         coachId: dto.coachId ?? userId,
-        title: dto.title ?? 'Clase',
-        startsAt: new Date(dto.startsAt),
-        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
-        status: this.toPrismaStatus(dto.status),
+        title: dto.title,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
+        endsAt: this.toOptionalDateUpdate(dto.endsAt),
+        status: this.toCreateStatus(dto.status, dto.startsAt),
         isEnabled: dto.isEnabled,
         notes: dto.notes,
       },
@@ -167,11 +168,11 @@ export class ClassSessionsService {
         trainingId: dto.trainingId,
         coachId: dto.coachId,
         title: dto.title,
-        startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
-        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+        startsAt: this.toOptionalDateUpdate(dto.startsAt),
+        endsAt: this.toOptionalDateUpdate(dto.endsAt),
         status:
           dto.status === undefined
-            ? undefined
+            ? this.toUpdateStatus(dto.startsAt)
             : this.toPrismaStatus(dto.status),
         isEnabled: dto.isEnabled,
         notes: dto.notes,
@@ -263,6 +264,26 @@ export class ClassSessionsService {
     });
   }
 
+  async createSectionForUser(
+    userId: string,
+    classSessionId: string,
+    organizationId: string | undefined,
+    dto: CreateClassSessionSectionDto,
+  ) {
+    const membership = await this.ensureCanManageClassSessionForUser(
+      userId,
+      classSessionId,
+      organizationId,
+    );
+
+    return this.createSection(
+      classSessionId,
+      membership.organizationId,
+      membership,
+      dto,
+    );
+  }
+
   async updateSection(
     sectionId: string,
     organizationId: string,
@@ -285,6 +306,26 @@ export class ClassSessionsService {
     });
   }
 
+  async updateSectionForUser(
+    userId: string,
+    sectionId: string,
+    organizationId: string | undefined,
+    dto: UpdateClassSessionSectionDto,
+  ) {
+    const membership = await this.ensureCanManageSectionForUser(
+      userId,
+      sectionId,
+      organizationId,
+    );
+
+    return this.updateSection(
+      sectionId,
+      membership.organizationId,
+      membership,
+      dto,
+    );
+  }
+
   async removeSection(
     sectionId: string,
     organizationId: string,
@@ -298,6 +339,20 @@ export class ClassSessionsService {
     });
 
     return { success: true };
+  }
+
+  async removeSectionForUser(
+    userId: string,
+    sectionId: string,
+    organizationId: string | undefined,
+  ) {
+    const membership = await this.ensureCanManageSectionForUser(
+      userId,
+      sectionId,
+      organizationId,
+    );
+
+    return this.removeSection(sectionId, membership.organizationId, membership);
   }
 
   async reorderSections(
@@ -344,6 +399,26 @@ export class ClassSessionsService {
       orderBy: { orderIndex: 'asc' },
       include: this.sectionInclude(),
     });
+  }
+
+  async reorderSectionsForUser(
+    userId: string,
+    classSessionId: string,
+    organizationId: string | undefined,
+    dto: ReorderClassSessionSectionsDto,
+  ) {
+    const membership = await this.ensureCanManageClassSessionForUser(
+      userId,
+      classSessionId,
+      organizationId,
+    );
+
+    return this.reorderSections(
+      classSessionId,
+      membership.organizationId,
+      membership,
+      dto,
+    );
   }
 
   async createSectionExercise(
@@ -393,6 +468,26 @@ export class ClassSessionsService {
     });
   }
 
+  async createSectionExerciseForUser(
+    userId: string,
+    sectionId: string,
+    organizationId: string | undefined,
+    dto: CreateClassSessionSectionExerciseDto,
+  ) {
+    const membership = await this.ensureCanManageSectionForUser(
+      userId,
+      sectionId,
+      organizationId,
+    );
+
+    return this.createSectionExercise(
+      sectionId,
+      membership.organizationId,
+      membership,
+      dto,
+    );
+  }
+
   async updateSectionExercise(
     id: string,
     organizationId: string,
@@ -438,6 +533,26 @@ export class ClassSessionsService {
     });
   }
 
+  async updateSectionExerciseForUser(
+    userId: string,
+    id: string,
+    organizationId: string | undefined,
+    dto: UpdateClassSessionSectionExerciseDto,
+  ) {
+    const membership = await this.ensureCanManageSectionExerciseForUser(
+      userId,
+      id,
+      organizationId,
+    );
+
+    return this.updateSectionExercise(
+      id,
+      membership.organizationId,
+      membership,
+      dto,
+    );
+  }
+
   async removeSectionExercise(
     id: string,
     organizationId: string,
@@ -451,6 +566,24 @@ export class ClassSessionsService {
     });
 
     return { success: true };
+  }
+
+  async removeSectionExerciseForUser(
+    userId: string,
+    id: string,
+    organizationId: string | undefined,
+  ) {
+    const membership = await this.ensureCanManageSectionExerciseForUser(
+      userId,
+      id,
+      organizationId,
+    );
+
+    return this.removeSectionExercise(
+      id,
+      membership.organizationId,
+      membership,
+    );
   }
 
   async reorderSectionExercises(
@@ -498,6 +631,26 @@ export class ClassSessionsService {
       orderBy: { orderIndex: 'asc' },
       include: { libraryExercise: true },
     });
+  }
+
+  async reorderSectionExercisesForUser(
+    userId: string,
+    sectionId: string,
+    organizationId: string | undefined,
+    dto: ReorderClassSessionSectionExercisesDto,
+  ) {
+    const membership = await this.ensureCanManageSectionForUser(
+      userId,
+      sectionId,
+      organizationId,
+    );
+
+    return this.reorderSectionExercises(
+      sectionId,
+      membership.organizationId,
+      membership,
+      dto,
+    );
   }
 
   async markAttendance(
@@ -605,6 +758,108 @@ export class ClassSessionsService {
     return training;
   }
 
+  private async ensureCanManageClassSessionForUser(
+    userId: string,
+    classSessionId: string,
+    organizationId?: string,
+  ) {
+    const session = await this.prisma.classSession.findFirst({
+      where: {
+        id: classSessionId,
+        ...(organizationId ? { organizationId } : {}),
+      },
+      select: { organizationId: true },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Class session not found');
+    }
+
+    return this.ensureUserCanManageOrganization(userId, session.organizationId);
+  }
+
+  private async ensureCanManageSectionForUser(
+    userId: string,
+    sectionId: string,
+    organizationId?: string,
+  ) {
+    const section = await this.prisma.classSessionSection.findFirst({
+      where: {
+        id: sectionId,
+        ...(organizationId ? { organizationId } : {}),
+      },
+      select: {
+        organizationId: true,
+        classSession: { select: { organizationId: true } },
+      },
+    });
+
+    if (
+      !section ||
+      section.classSession.organizationId !== section.organizationId
+    ) {
+      throw new NotFoundException('Class session section not found');
+    }
+
+    return this.ensureUserCanManageOrganization(userId, section.organizationId);
+  }
+
+  private async ensureCanManageSectionExerciseForUser(
+    userId: string,
+    id: string,
+    organizationId?: string,
+  ) {
+    const exercise = await this.prisma.classSessionSectionExercise.findFirst({
+      where: {
+        id,
+        ...(organizationId ? { organizationId } : {}),
+      },
+      select: {
+        organizationId: true,
+        section: {
+          select: {
+            organizationId: true,
+            classSession: { select: { organizationId: true } },
+          },
+        },
+      },
+    });
+
+    if (
+      !exercise ||
+      exercise.section.organizationId !== exercise.organizationId ||
+      exercise.section.classSession.organizationId !== exercise.organizationId
+    ) {
+      throw new NotFoundException('Class session section exercise not found');
+    }
+
+    return this.ensureUserCanManageOrganization(
+      userId,
+      exercise.organizationId,
+    );
+  }
+
+  private async ensureUserCanManageOrganization(
+    userId: string,
+    organizationId: string,
+  ) {
+    const membership = await this.prisma.organizationMember.findFirst({
+      where: {
+        organizationId,
+        profileId: userId,
+        status: MemberStatus.ACTIVE,
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException('Organization access denied');
+    }
+
+    this.ensureCanManage(membership);
+
+    return membership;
+  }
+
   private async ensureClassSessionExists(id: string, organizationId: string) {
     const session = await this.prisma.classSession.findFirst({
       where: { id, organizationId },
@@ -709,14 +964,18 @@ export class ClassSessionsService {
   ) {
     const session = await this.prisma.classSession.findFirst({
       where: { id, organizationId },
-      select: { id: true, status: true, isEnabled: true },
+      select: { id: true, status: true, isEnabled: true, startsAt: true },
     });
 
     if (!session) {
       throw new NotFoundException('Class session not found');
     }
 
-    if (session.status !== ClassSessionStatus.SCHEDULED || !session.isEnabled) {
+    if (
+      session.status !== ClassSessionStatus.SCHEDULED ||
+      !session.isEnabled ||
+      !session.startsAt
+    ) {
       throw new BadRequestException('Class session is not bookable');
     }
 
@@ -734,6 +993,33 @@ export class ClassSessionsService {
 
   private toPrismaStatus(status?: ClassSessionStatus) {
     return status ?? ClassSessionStatus.SCHEDULED;
+  }
+
+  private toCreateStatus(
+    status: ClassSessionStatus | undefined,
+    startsAt: string | null | undefined,
+  ) {
+    if (!startsAt) {
+      return ClassSessionStatus.DRAFT;
+    }
+
+    return status ?? ClassSessionStatus.SCHEDULED;
+  }
+
+  private toUpdateStatus(startsAt: string | null | undefined) {
+    if (startsAt === undefined) {
+      return undefined;
+    }
+
+    return startsAt ? ClassSessionStatus.SCHEDULED : ClassSessionStatus.DRAFT;
+  }
+
+  private toOptionalDateUpdate(value: string | null | undefined) {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    return value ? new Date(value) : null;
   }
 
   private buildFindAllWhere(
