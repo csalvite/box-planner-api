@@ -30,22 +30,24 @@ model Profile {
 }
 
 model Organization {
-  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name          String
-  slug          String               @unique
-  type          OrganizationType     @default(GYM)
-  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  attendances   Attendance[]
-  blocks        Block[]
-  classSessions ClassSession[]
-  exerciseTags  ExerciseTag[]
-  exercises     Exercise[]
-  invitations   Invitation[]
-  materials     Material[]
-  mediaAssets   MediaAsset[]
-  members       OrganizationMember[]
-  trainings     Training[]
+  id                           String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                         String
+  slug                         String                        @unique
+  type                         OrganizationType              @default(GYM)
+  createdAt                    DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attendances                  Attendance[]
+  blocks                       Block[]
+  classSessionSectionExercises ClassSessionSectionExercise[]
+  classSessionSections         ClassSessionSection[]
+  classSessions                ClassSession[]
+  exerciseTags                 ExerciseTag[]
+  exercises                    Exercise[]
+  invitations                  Invitation[]
+  materials                    Material[]
+  mediaAssets                  MediaAsset[]
+  members                      OrganizationMember[]
+  trainings                    Training[]
 
   @@map("organizations")
   @@schema("public")
@@ -135,7 +137,6 @@ model Block {
 model BlockExercise {
   id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   blockId         String      @map("block_id") @db.Uuid
-  exerciseId      String?     @map("exercise_id") @db.Uuid
   name            String
   description     String?
   durationSec     Int?        @map("duration_sec")
@@ -147,6 +148,7 @@ model BlockExercise {
   notes           String?
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  exerciseId      String?     @map("exercise_id") @db.Uuid
   block           Block       @relation(fields: [blockId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   libraryExercise Exercise?   @relation(fields: [exerciseId], references: [id], onDelete: SetNull, onUpdate: NoAction)
   media           MediaAsset? @relation(fields: [mediaId], references: [id], onUpdate: NoAction)
@@ -211,22 +213,23 @@ model Training {
 }
 
 model ClassSession {
-  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String             @map("organization_id") @db.Uuid
-  trainingId     String?            @map("training_id") @db.Uuid
-  coachId        String?            @map("coach_id") @db.Uuid
-  title          String?
-  startsAt       DateTime           @map("starts_at") @db.Timestamptz(6)
-  endsAt         DateTime?          @map("ends_at") @db.Timestamptz(6)
-  status         ClassSessionStatus @default(SCHEDULED)
+  id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                @map("organization_id") @db.Uuid
+  trainingId     String?               @map("training_id") @db.Uuid
+  coachId        String?               @map("coach_id") @db.Uuid
+  title          String
+  startsAt       DateTime              @map("starts_at") @db.Timestamptz(6)
+  endsAt         DateTime?             @map("ends_at") @db.Timestamptz(6)
+  status         ClassSessionStatus    @default(SCHEDULED)
   notes          String?
-  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  isEnabled      Boolean            @default(true) @map("is_enabled")
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  isEnabled      Boolean               @default(true) @map("is_enabled")
   attendances    Attendance[]
-  coach          Profile?           @relation("ClassSessionCoach", fields: [coachId], references: [id], onUpdate: NoAction)
-  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  training       Training?          @relation(fields: [trainingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sections       ClassSessionSection[]
+  coach          Profile?              @relation("ClassSessionCoach", fields: [coachId], references: [id], onUpdate: NoAction)
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  training       Training?             @relation(fields: [trainingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([organizationId])
   @@index([trainingId])
@@ -843,33 +846,34 @@ model ExerciseVariant {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Exercise {
-  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId         String?                 @map("organization_id") @db.Uuid
-  createdByProfileId     String?                 @map("created_by_profile_id") @db.Uuid
-  name                   String
-  shortDescription       String?                 @map("short_description")
-  detailedDescription    String?                 @map("detailed_description")
-  category               exercise_category       @default(OTHER)
-  mainGoal               String?                 @map("main_goal")
-  level                  exercise_level          @default(ALL_LEVELS)
-  averageDurationMinutes Int?                    @map("average_duration_minutes")
-  intensity              exercise_intensity      @default(MEDIUM)
-  recommendedGroupSize   String?                 @map("recommended_group_size")
-  spaceRequired          String?                 @map("space_required")
-  requiresPartner        Boolean                 @default(false) @map("requires_partner")
-  coachNotes             String?                 @map("coach_notes")
-  isGlobal               Boolean                 @default(false) @map("is_global")
-  isActive               Boolean                 @default(true) @map("is_active")
-  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  blockExercises         BlockExercise[]
-  compatibilities        ExerciseCompatibility[] @relation("ExerciseCompatibilities")
-  relatedCompatibilities ExerciseCompatibility[] @relation("RelatedExerciseCompatibilities")
-  exerciseToMaterials    ExerciseToMaterial[]
-  exerciseToTags         ExerciseToTag[]
-  variants               ExerciseVariant[]
-  createdByProfile       Profile?                @relation("ExerciseCreatedBy", fields: [createdByProfileId], references: [id], onUpdate: NoAction)
-  organization           Organization?           @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                           String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId               String?                       @map("organization_id") @db.Uuid
+  createdByProfileId           String?                       @map("created_by_profile_id") @db.Uuid
+  name                         String
+  shortDescription             String?                       @map("short_description")
+  detailedDescription          String?                       @map("detailed_description")
+  category                     exercise_category             @default(OTHER)
+  mainGoal                     String?                       @map("main_goal")
+  level                        exercise_level                @default(ALL_LEVELS)
+  averageDurationMinutes       Int?                          @map("average_duration_minutes")
+  intensity                    exercise_intensity            @default(MEDIUM)
+  recommendedGroupSize         String?                       @map("recommended_group_size")
+  spaceRequired                String?                       @map("space_required")
+  requiresPartner              Boolean                       @default(false) @map("requires_partner")
+  coachNotes                   String?                       @map("coach_notes")
+  isGlobal                     Boolean                       @default(false) @map("is_global")
+  isActive                     Boolean                       @default(true) @map("is_active")
+  createdAt                    DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  blockExercises               BlockExercise[]
+  classSessionSectionExercises ClassSessionSectionExercise[]
+  compatibilities              ExerciseCompatibility[]       @relation("ExerciseCompatibilities")
+  relatedCompatibilities       ExerciseCompatibility[]       @relation("RelatedExerciseCompatibilities")
+  exerciseToMaterials          ExerciseToMaterial[]
+  exerciseToTags               ExerciseToTag[]
+  variants                     ExerciseVariant[]
+  createdByProfile             Profile?                      @relation("ExerciseCreatedBy", fields: [createdByProfileId], references: [id], onUpdate: NoAction)
+  organization                 Organization?                 @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([category], map: "idx_exercises_category")
   @@index([intensity], map: "idx_exercises_intensity")
@@ -896,6 +900,56 @@ model Material {
 
   @@index([organizationId], map: "idx_materials_organization_id")
   @@map("materials")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ClassSessionSectionExercise {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String              @map("organization_id") @db.Uuid
+  sectionId       String              @map("section_id") @db.Uuid
+  exerciseId      String?             @map("exercise_id") @db.Uuid
+  name            String
+  description     String?
+  durationSec     Int?                @map("duration_sec")
+  reps            Int?
+  restSec         Int?                @map("rest_sec")
+  orderIndex      Int                 @default(0) @map("order_index")
+  notes           String?
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  libraryExercise Exercise?           @relation(fields: [exerciseId], references: [id], onUpdate: NoAction)
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  section         ClassSessionSection @relation(fields: [sectionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([exerciseId], map: "idx_class_session_section_exercises_exercise")
+  @@index([sectionId, orderIndex], map: "idx_class_session_section_exercises_order")
+  @@index([organizationId], map: "idx_class_session_section_exercises_org")
+  @@index([sectionId], map: "idx_class_session_section_exercises_section")
+  @@map("class_session_section_exercises")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ClassSessionSection {
+  id                       String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId           String                        @map("organization_id") @db.Uuid
+  classSessionId           String                        @map("class_session_id") @db.Uuid
+  name                     String
+  objective                String?
+  estimatedDurationMinutes Int?                          @map("estimated_duration_minutes")
+  orderIndex               Int                           @default(0) @map("order_index")
+  notes                    String?
+  createdAt                DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  exercises                ClassSessionSectionExercise[]
+  classSession             ClassSession                  @relation(fields: [classSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization             Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([classSessionId], map: "idx_class_session_sections_class_session")
+  @@index([classSessionId, orderIndex], map: "idx_class_session_sections_order")
+  @@index([organizationId], map: "idx_class_session_sections_org")
+  @@map("class_session_sections")
   @@schema("public")
 }
 

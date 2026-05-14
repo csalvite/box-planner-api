@@ -13,12 +13,18 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClassSessionDto } from './dto/create-class-session.dto';
+import { CreateClassSessionSectionDto } from './dto/create-class-session-section.dto';
+import { CreateClassSessionSectionExerciseDto } from './dto/create-class-session-section-exercise.dto';
 import {
   ClassSessionEnabledFilter,
   ClassSessionListStatus,
   ListClassSessionsDto,
 } from './dto/list-class-sessions.dto';
+import { ReorderClassSessionSectionExercisesDto } from './dto/reorder-class-session-section-exercises.dto';
+import { ReorderClassSessionSectionsDto } from './dto/reorder-class-session-sections.dto';
 import { UpdateClassSessionDto } from './dto/update-class-session.dto';
+import { UpdateClassSessionSectionDto } from './dto/update-class-session-section.dto';
+import { UpdateClassSessionSectionExerciseDto } from './dto/update-class-session-section-exercise.dto';
 import { UpdateClassSessionStatusDto } from './dto/update-class-session-status.dto';
 
 @Injectable()
@@ -56,6 +62,7 @@ export class ClassSessionsService {
           where: { status: AttendanceStatus.ATTENDED },
           select: { profileId: true },
         },
+        sections: this.sectionsSelect(),
       },
     });
 
@@ -88,6 +95,7 @@ export class ClassSessionsService {
       training: session.trainingId
         ? (trainingsById.get(session.trainingId) ?? null)
         : null,
+      sections: session.sections,
       attendanceCount: attendances.length,
       hasCurrentUserAttendance: attendances.some(
         (attendance) => attendance.profileId === userId,
@@ -112,7 +120,7 @@ export class ClassSessionsService {
         organizationId,
         trainingId: dto.trainingId ?? null,
         coachId: dto.coachId ?? userId,
-        title: dto.title,
+        title: dto.title ?? 'Clase',
         startsAt: new Date(dto.startsAt),
         endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
         status: this.toPrismaStatus(dto.status),
@@ -130,7 +138,7 @@ export class ClassSessionsService {
     this.ensureCanRead(membership);
     const session = await this.prisma.classSession.findFirst({
       where: { id, organizationId },
-      include: this.trainingTreeInclude(),
+      include: this.classSessionDetailInclude(),
     });
 
     if (!session) {
@@ -224,6 +232,272 @@ export class ClassSessionsService {
     ]);
 
     return { id, deleted: true };
+  }
+
+  async createSection(
+    classSessionId: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: CreateClassSessionSectionDto,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureClassSessionExists(classSessionId, organizationId);
+
+    const orderIndex =
+      dto.orderIndex ??
+      (await this.prisma.classSessionSection.count({
+        where: { classSessionId, organizationId },
+      }));
+
+    return this.prisma.classSessionSection.create({
+      data: {
+        organizationId,
+        classSessionId,
+        name: dto.name,
+        objective: dto.objective,
+        estimatedDurationMinutes: dto.estimatedDurationMinutes,
+        orderIndex,
+        notes: dto.notes,
+      },
+      include: this.sectionInclude(),
+    });
+  }
+
+  async updateSection(
+    sectionId: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: UpdateClassSessionSectionDto,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureSectionExists(sectionId, organizationId);
+
+    return this.prisma.classSessionSection.update({
+      where: { id: sectionId },
+      data: {
+        name: dto.name,
+        objective: dto.objective,
+        estimatedDurationMinutes: dto.estimatedDurationMinutes,
+        orderIndex: dto.orderIndex,
+        notes: dto.notes,
+      },
+      include: this.sectionInclude(),
+    });
+  }
+
+  async removeSection(
+    sectionId: string,
+    organizationId: string,
+    membership: OrganizationMember,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureSectionExists(sectionId, organizationId);
+
+    await this.prisma.classSessionSection.deleteMany({
+      where: { id: sectionId, organizationId },
+    });
+
+    return { success: true };
+  }
+
+  async reorderSections(
+    classSessionId: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: ReorderClassSessionSectionsDto,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureClassSessionExists(classSessionId, organizationId);
+
+    const sectionIds = dto.order.map((item) => item.sectionId);
+    const uniqueSectionIds = [...new Set(sectionIds)];
+    const existingSections = await this.prisma.classSessionSection.findMany({
+      where: {
+        classSessionId,
+        organizationId,
+        id: { in: uniqueSectionIds },
+      },
+      select: { id: true },
+    });
+
+    if (existingSections.length !== uniqueSectionIds.length) {
+      throw new NotFoundException('Class session section not found');
+    }
+
+    await this.prisma.$transaction([
+      ...dto.order.map((item, index) =>
+        this.prisma.classSessionSection.update({
+          where: { id: item.sectionId },
+          data: { orderIndex: -1000000 - index },
+        }),
+      ),
+      ...dto.order.map((item) =>
+        this.prisma.classSessionSection.update({
+          where: { id: item.sectionId },
+          data: { orderIndex: item.orderIndex },
+        }),
+      ),
+    ]);
+
+    return this.prisma.classSessionSection.findMany({
+      where: { classSessionId, organizationId },
+      orderBy: { orderIndex: 'asc' },
+      include: this.sectionInclude(),
+    });
+  }
+
+  async createSectionExercise(
+    sectionId: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: CreateClassSessionSectionExerciseDto,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureSectionExists(sectionId, organizationId);
+    const libraryExercise = dto.exerciseId
+      ? await this.ensureAccessibleLibraryExercise(
+          dto.exerciseId,
+          organizationId,
+        )
+      : null;
+
+    if (!libraryExercise && !dto.name) {
+      throw new BadRequestException('Exercise name is required');
+    }
+
+    const orderIndex =
+      dto.orderIndex ??
+      (await this.prisma.classSessionSectionExercise.count({
+        where: { sectionId, organizationId },
+      }));
+
+    return this.prisma.classSessionSectionExercise.create({
+      data: {
+        organizationId,
+        sectionId,
+        exerciseId: libraryExercise?.id ?? null,
+        name: dto.name ?? libraryExercise?.name ?? '',
+        description:
+          dto.description ??
+          libraryExercise?.detailedDescription ??
+          libraryExercise?.shortDescription,
+        durationSec:
+          dto.durationSec ??
+          this.minutesToSeconds(libraryExercise?.averageDurationMinutes),
+        reps: dto.reps,
+        restSec: dto.restSec,
+        orderIndex,
+        notes: dto.notes,
+      },
+      include: { libraryExercise: true },
+    });
+  }
+
+  async updateSectionExercise(
+    id: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: UpdateClassSessionSectionExerciseDto,
+  ) {
+    this.ensureCanManage(membership);
+    const existing = await this.ensureSectionExerciseExists(id, organizationId);
+    const libraryExercise =
+      dto.exerciseId === undefined
+        ? undefined
+        : dto.exerciseId
+          ? await this.ensureAccessibleLibraryExercise(
+              dto.exerciseId,
+              organizationId,
+            )
+          : null;
+
+    return this.prisma.classSessionSectionExercise.update({
+      where: { id },
+      data: {
+        exerciseId:
+          dto.exerciseId === undefined
+            ? existing.exerciseId
+            : (libraryExercise?.id ?? null),
+        name: dto.name ?? libraryExercise?.name ?? existing.name,
+        description:
+          dto.description ??
+          libraryExercise?.detailedDescription ??
+          libraryExercise?.shortDescription ??
+          existing.description,
+        durationSec:
+          dto.durationSec ??
+          this.minutesToSeconds(libraryExercise?.averageDurationMinutes) ??
+          existing.durationSec,
+        reps: dto.reps ?? existing.reps,
+        restSec: dto.restSec === undefined ? existing.restSec : dto.restSec,
+        orderIndex:
+          dto.orderIndex === undefined ? existing.orderIndex : dto.orderIndex,
+        notes: dto.notes ?? existing.notes,
+      },
+      include: { libraryExercise: true },
+    });
+  }
+
+  async removeSectionExercise(
+    id: string,
+    organizationId: string,
+    membership: OrganizationMember,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureSectionExerciseExists(id, organizationId);
+
+    await this.prisma.classSessionSectionExercise.deleteMany({
+      where: { id, organizationId },
+    });
+
+    return { success: true };
+  }
+
+  async reorderSectionExercises(
+    sectionId: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: ReorderClassSessionSectionExercisesDto,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureSectionExists(sectionId, organizationId);
+
+    const exerciseIds = dto.order.map((item) => item.exerciseId);
+    const uniqueExerciseIds = [...new Set(exerciseIds)];
+    const existingExercises =
+      await this.prisma.classSessionSectionExercise.findMany({
+        where: {
+          sectionId,
+          organizationId,
+          id: { in: uniqueExerciseIds },
+        },
+        select: { id: true },
+      });
+
+    if (existingExercises.length !== uniqueExerciseIds.length) {
+      throw new NotFoundException('Class session section exercise not found');
+    }
+
+    await this.prisma.$transaction([
+      ...dto.order.map((item, index) =>
+        this.prisma.classSessionSectionExercise.update({
+          where: { id: item.exerciseId },
+          data: { orderIndex: -1000000 - index },
+        }),
+      ),
+      ...dto.order.map((item) =>
+        this.prisma.classSessionSectionExercise.update({
+          where: { id: item.exerciseId },
+          data: { orderIndex: item.orderIndex },
+        }),
+      ),
+    ]);
+
+    return this.prisma.classSessionSectionExercise.findMany({
+      where: { sectionId, organizationId },
+      orderBy: { orderIndex: 'asc' },
+      include: { libraryExercise: true },
+    });
   }
 
   async markAttendance(
@@ -344,6 +618,91 @@ export class ClassSessionsService {
     return session;
   }
 
+  private async ensureSectionExists(id: string, organizationId: string) {
+    const section = await this.prisma.classSessionSection.findFirst({
+      where: { id, organizationId },
+      select: {
+        id: true,
+        classSessionId: true,
+        organizationId: true,
+        classSession: {
+          select: { organizationId: true },
+        },
+      },
+    });
+
+    if (!section || section.classSession.organizationId !== organizationId) {
+      throw new NotFoundException('Class session section not found');
+    }
+
+    return section;
+  }
+
+  private async ensureSectionExerciseExists(
+    id: string,
+    organizationId: string,
+  ) {
+    const exercise = await this.prisma.classSessionSectionExercise.findFirst({
+      where: { id, organizationId },
+      select: {
+        id: true,
+        organizationId: true,
+        sectionId: true,
+        exerciseId: true,
+        name: true,
+        description: true,
+        durationSec: true,
+        reps: true,
+        restSec: true,
+        orderIndex: true,
+        notes: true,
+        section: {
+          select: {
+            organizationId: true,
+            classSession: {
+              select: { organizationId: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (
+      !exercise ||
+      exercise.section.organizationId !== organizationId ||
+      exercise.section.classSession.organizationId !== organizationId
+    ) {
+      throw new NotFoundException('Class session section exercise not found');
+    }
+
+    return exercise;
+  }
+
+  private async ensureAccessibleLibraryExercise(
+    id: string,
+    organizationId: string,
+  ) {
+    const exercise = await this.prisma.exercise.findFirst({
+      where: {
+        id,
+        OR: [{ isGlobal: true }, { organizationId }],
+      },
+      select: {
+        id: true,
+        name: true,
+        shortDescription: true,
+        detailedDescription: true,
+        averageDurationMinutes: true,
+      },
+    });
+
+    if (!exercise) {
+      throw new NotFoundException('Exercise not found');
+    }
+
+    return exercise;
+  }
+
   private async ensureClassSessionIsBookable(
     id: string,
     organizationId: string,
@@ -357,10 +716,7 @@ export class ClassSessionsService {
       throw new NotFoundException('Class session not found');
     }
 
-    if (
-      session.status !== ClassSessionStatus.SCHEDULED ||
-      !session.isEnabled
-    ) {
+    if (session.status !== ClassSessionStatus.SCHEDULED || !session.isEnabled) {
       throw new BadRequestException('Class session is not bookable');
     }
 
@@ -415,7 +771,7 @@ export class ClassSessionsService {
     return where;
   }
 
-  private trainingTreeInclude() {
+  private classSessionDetailInclude() {
     return {
       training: {
         include: {
@@ -436,6 +792,27 @@ export class ClassSessionsService {
       },
       coach: true,
       attendances: true,
+      sections: this.sectionsSelect(),
     };
+  }
+
+  private sectionInclude() {
+    return {
+      exercises: {
+        orderBy: { orderIndex: 'asc' as const },
+        include: { libraryExercise: true },
+      },
+    };
+  }
+
+  private sectionsSelect() {
+    return {
+      orderBy: { orderIndex: 'asc' as const },
+      include: this.sectionInclude(),
+    };
+  }
+
+  private minutesToSeconds(minutes: number | null | undefined) {
+    return minutes === null || minutes === undefined ? undefined : minutes * 60;
   }
 }

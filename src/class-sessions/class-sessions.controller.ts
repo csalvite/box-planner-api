@@ -19,8 +19,14 @@ import { OrganizationWriteAccess } from '../organizations/decorators/organizatio
 import { OrganizationMemberGuard } from '../organizations/guards/organization-member.guard';
 import { ClassSessionsService } from './class-sessions.service';
 import { CreateClassSessionDto } from './dto/create-class-session.dto';
+import { CreateClassSessionSectionDto } from './dto/create-class-session-section.dto';
+import { CreateClassSessionSectionExerciseDto } from './dto/create-class-session-section-exercise.dto';
 import { ListClassSessionsDto } from './dto/list-class-sessions.dto';
+import { ReorderClassSessionSectionExercisesDto } from './dto/reorder-class-session-section-exercises.dto';
+import { ReorderClassSessionSectionsDto } from './dto/reorder-class-session-sections.dto';
 import { UpdateClassSessionDto } from './dto/update-class-session.dto';
+import { UpdateClassSessionSectionDto } from './dto/update-class-session-section.dto';
+import { UpdateClassSessionSectionExerciseDto } from './dto/update-class-session-section-exercise.dto';
 import { UpdateClassSessionStatusDto } from './dto/update-class-session-status.dto';
 
 @ApiTags('class-sessions')
@@ -57,6 +63,40 @@ export class ClassSessionsController {
   ) {
     return this.classSessionsService.create(
       user.id,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Post(':classSessionId/sections')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Crear seccion de una sesion de clase' })
+  createSection(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('classSessionId') classSessionId: string,
+    @Body() dto: CreateClassSessionSectionDto,
+  ) {
+    return this.classSessionsService.createSection(
+      classSessionId,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Patch(':classSessionId/sections/reorder')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Reordenar secciones de una sesion de clase' })
+  reorderSections(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('classSessionId') classSessionId: string,
+    @Body() dto: ReorderClassSessionSectionsDto,
+  ) {
+    return this.classSessionsService.reorderSections(
+      classSessionId,
       organizationId,
       membership,
       dto,
@@ -116,6 +156,104 @@ export class ClassSessionsController {
     @Param('id') id: string,
   ) {
     return this.classSessionsService.remove(id, organizationId, membership);
+  }
+
+  @Patch('sections/:sectionId')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Actualizar seccion de una sesion de clase' })
+  updateSection(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('sectionId') sectionId: string,
+    @Body() dto: UpdateClassSessionSectionDto,
+  ) {
+    return this.classSessionsService.updateSection(
+      sectionId,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Delete('sections/:sectionId')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Eliminar seccion de una sesion de clase' })
+  removeSection(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('sectionId') sectionId: string,
+  ) {
+    return this.classSessionsService.removeSection(
+      sectionId,
+      organizationId,
+      membership,
+    );
+  }
+
+  @Post('sections/:sectionId/exercises')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Crear ejercicio dentro de una seccion' })
+  createSectionExercise(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('sectionId') sectionId: string,
+    @Body() dto: CreateClassSessionSectionExerciseDto,
+  ) {
+    return this.classSessionsService.createSectionExercise(
+      sectionId,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Patch('sections/:sectionId/exercises/reorder')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Reordenar ejercicios dentro de una seccion' })
+  reorderSectionExercises(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('sectionId') sectionId: string,
+    @Body() dto: ReorderClassSessionSectionExercisesDto,
+  ) {
+    return this.classSessionsService.reorderSectionExercises(
+      sectionId,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Patch('section-exercises/:id')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Actualizar ejercicio de una seccion' })
+  updateSectionExercise(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('id') id: string,
+    @Body() dto: UpdateClassSessionSectionExerciseDto,
+  ) {
+    return this.classSessionsService.updateSectionExercise(
+      id,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Delete('section-exercises/:id')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Eliminar ejercicio de una seccion' })
+  removeSectionExercise(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('id') id: string,
+  ) {
+    return this.classSessionsService.removeSectionExercise(
+      id,
+      organizationId,
+      membership,
+    );
   }
 
   @Post(':id/attendance')

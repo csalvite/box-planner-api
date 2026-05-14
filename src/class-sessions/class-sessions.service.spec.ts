@@ -23,6 +23,25 @@ describe('ClassSessionsService', () => {
       update: jest.fn(),
       deleteMany: jest.fn(),
     },
+    classSessionSection: {
+      count: jest.fn(),
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    classSessionSectionExercise: {
+      count: jest.fn(),
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    exercise: {
+      findFirst: jest.fn(),
+    },
     training: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -49,6 +68,15 @@ describe('ClassSessionsService', () => {
     id: 'membership-owner',
     profileId: 'owner-1',
     role: OrganizationRole.OWNER,
+  };
+  const sectionsSelect = {
+    orderBy: { orderIndex: 'asc' },
+    include: {
+      exercises: {
+        orderBy: { orderIndex: 'asc' },
+        include: { libraryExercise: true },
+      },
+    },
   };
 
   beforeEach(async () => {
@@ -86,6 +114,7 @@ describe('ClassSessionsService', () => {
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         coach: { id: 'coach-1' },
         attendances: [{ profileId: 'owner-1' }, { profileId: 'student-2' }],
+        sections: [],
       },
     ];
     const training = { id: 'training-1', title: 'Basics' };
@@ -115,6 +144,7 @@ describe('ClassSessionsService', () => {
           where: { status: AttendanceStatus.ATTENDED },
           select: { profileId: true },
         },
+        sections: sectionsSelect,
       },
     });
     expect(prismaMock.training.findMany).toHaveBeenCalledWith({
@@ -133,6 +163,7 @@ describe('ClassSessionsService', () => {
         isEnabled: true,
         notes: 'Bring wraps',
         training,
+        sections: [],
         attendanceCount: 2,
         hasCurrentUserAttendance: true,
       },
@@ -156,6 +187,7 @@ describe('ClassSessionsService', () => {
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         coach: null,
         attendances: [],
+        sections: [],
       },
     ]);
     prismaMock.training.findMany.mockResolvedValue([]);
@@ -171,6 +203,7 @@ describe('ClassSessionsService', () => {
       isEnabled: true,
       notes: null,
       training: null,
+      sections: [],
       attendanceCount: 0,
       hasCurrentUserAttendance: false,
     });
@@ -194,6 +227,7 @@ describe('ClassSessionsService', () => {
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         coach: null,
         attendances: [],
+        sections: [],
       },
     ]);
     prismaMock.training.findMany.mockResolvedValue([]);
@@ -215,6 +249,7 @@ describe('ClassSessionsService', () => {
       isEnabled: true,
       notes: null,
       training: null,
+      sections: [],
       attendanceCount: 0,
       hasCurrentUserAttendance: false,
     });
@@ -264,6 +299,7 @@ describe('ClassSessionsService', () => {
           where: { status: AttendanceStatus.ATTENDED },
           select: { profileId: true },
         },
+        sections: sectionsSelect,
       },
     });
   });
@@ -297,6 +333,7 @@ describe('ClassSessionsService', () => {
           where: { status: AttendanceStatus.ATTENDED },
           select: { profileId: true },
         },
+        sections: sectionsSelect,
       },
     });
   });
@@ -738,5 +775,139 @@ describe('ClassSessionsService', () => {
       hasCurrentUserAttendance: true,
     });
   });
-});
 
+  it('should create a section on a class session with the next order index', async () => {
+    const createdSection = {
+      id: 'section-1',
+      organizationId: 'org-1',
+      classSessionId: 'session-1',
+      name: 'Warmup',
+      orderIndex: 2,
+      exercises: [],
+    };
+
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSessionSection.count.mockResolvedValue(2);
+    prismaMock.classSessionSection.create.mockResolvedValue(createdSection);
+
+    const result = await service.createSection(
+      'session-1',
+      'org-1',
+      coachMembership,
+      {
+        name: 'Warmup',
+        objective: 'Raise temperature',
+      },
+    );
+
+    expect(prismaMock.classSession.findFirst).toHaveBeenCalledWith({
+      where: { id: 'session-1', organizationId: 'org-1' },
+      select: { id: true },
+    });
+    expect(prismaMock.classSessionSection.create).toHaveBeenCalledWith({
+      data: {
+        organizationId: 'org-1',
+        classSessionId: 'session-1',
+        name: 'Warmup',
+        objective: 'Raise temperature',
+        estimatedDurationMinutes: undefined,
+        orderIndex: 2,
+        notes: undefined,
+      },
+      include: sectionsSelect.include,
+    });
+    expect(result).toEqual(createdSection);
+  });
+
+  it('should add a library exercise to a section as a snapshot', async () => {
+    const libraryExercise = {
+      id: 'exercise-1',
+      name: 'Jab cross',
+      shortDescription: 'Basic combo',
+      detailedDescription: 'Jab cross with footwork',
+      averageDurationMinutes: 5,
+    };
+    const createdExercise = {
+      id: 'section-exercise-1',
+      organizationId: 'org-1',
+      sectionId: 'section-1',
+      exerciseId: 'exercise-1',
+      name: 'Jab cross',
+      description: 'Jab cross with footwork',
+      durationSec: 300,
+      orderIndex: 1,
+    };
+
+    prismaMock.classSessionSection.findFirst.mockResolvedValue({
+      id: 'section-1',
+      organizationId: 'org-1',
+      classSessionId: 'session-1',
+      classSession: { organizationId: 'org-1' },
+    });
+    prismaMock.exercise.findFirst.mockResolvedValue(libraryExercise);
+    prismaMock.classSessionSectionExercise.count.mockResolvedValue(1);
+    prismaMock.classSessionSectionExercise.create.mockResolvedValue(
+      createdExercise,
+    );
+
+    const result = await service.createSectionExercise(
+      'section-1',
+      'org-1',
+      coachMembership,
+      {
+        exerciseId: 'exercise-1',
+        restSec: 30,
+      },
+    );
+
+    expect(prismaMock.exercise.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'exercise-1',
+        OR: [{ isGlobal: true }, { organizationId: 'org-1' }],
+      },
+      select: {
+        id: true,
+        name: true,
+        shortDescription: true,
+        detailedDescription: true,
+        averageDurationMinutes: true,
+      },
+    });
+    expect(prismaMock.classSessionSectionExercise.create).toHaveBeenCalledWith({
+      data: {
+        organizationId: 'org-1',
+        sectionId: 'section-1',
+        exerciseId: 'exercise-1',
+        name: 'Jab cross',
+        description: 'Jab cross with footwork',
+        durationSec: 300,
+        reps: undefined,
+        restSec: 30,
+        orderIndex: 1,
+        notes: undefined,
+      },
+      include: { libraryExercise: true },
+    });
+    expect(result).toEqual(createdExercise);
+  });
+
+  it('should reject private library exercises from another organization', async () => {
+    prismaMock.classSessionSection.findFirst.mockResolvedValue({
+      id: 'section-1',
+      organizationId: 'org-1',
+      classSessionId: 'session-1',
+      classSession: { organizationId: 'org-1' },
+    });
+    prismaMock.exercise.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createSectionExercise('section-1', 'org-1', coachMembership, {
+        exerciseId: 'exercise-other-org',
+      }),
+    ).rejects.toThrow('Exercise not found');
+
+    expect(
+      prismaMock.classSessionSectionExercise.create,
+    ).not.toHaveBeenCalled();
+  });
+});
