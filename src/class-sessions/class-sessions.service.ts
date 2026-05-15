@@ -53,6 +53,7 @@ export class ClassSessionsService {
         title: true,
         startsAt: true,
         endsAt: true,
+        targetDurationMinutes: true,
         status: true,
         isEnabled: true,
         notes: true,
@@ -90,6 +91,10 @@ export class ClassSessionsService {
       title: session.title,
       startsAt: session.startsAt,
       endsAt: session.endsAt,
+      targetDurationMinutes: session.targetDurationMinutes,
+      estimatedDurationMinutes: this.calculateEstimatedDurationMinutes(
+        session.sections,
+      ),
       status: session.status,
       isEnabled: session.isEnabled,
       notes: session.notes,
@@ -124,6 +129,7 @@ export class ClassSessionsService {
         title: dto.title,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
         endsAt: this.toOptionalDateUpdate(dto.endsAt),
+        targetDurationMinutes: dto.targetDurationMinutes,
         status: this.toCreateStatus(dto.status, dto.startsAt),
         isEnabled: dto.isEnabled,
         notes: dto.notes,
@@ -146,7 +152,12 @@ export class ClassSessionsService {
       throw new NotFoundException('Class session not found');
     }
 
-    return session;
+    return {
+      ...session,
+      estimatedDurationMinutes: this.calculateEstimatedDurationMinutes(
+        session.sections,
+      ),
+    };
   }
 
   async update(
@@ -170,6 +181,7 @@ export class ClassSessionsService {
         title: dto.title,
         startsAt: this.toOptionalDateUpdate(dto.startsAt),
         endsAt: this.toOptionalDateUpdate(dto.endsAt),
+        targetDurationMinutes: dto.targetDurationMinutes,
         status:
           dto.status === undefined
             ? this.toUpdateStatus(dto.startsAt)
@@ -1100,5 +1112,24 @@ export class ClassSessionsService {
 
   private minutesToSeconds(minutes: number | null | undefined) {
     return minutes === null || minutes === undefined ? undefined : minutes * 60;
+  }
+
+  private calculateEstimatedDurationMinutes(
+    sections: Array<{
+      exercises: Array<{ durationSec: number | null }>;
+    }>,
+  ) {
+    const totalDurationSec = sections.reduce(
+      (sectionTotal, section) =>
+        sectionTotal +
+        section.exercises.reduce(
+          (exerciseTotal, exercise) =>
+            exerciseTotal + (exercise.durationSec ?? 0),
+          0,
+        ),
+      0,
+    );
+
+    return Math.ceil(totalDurationSec / 60);
   }
 }

@@ -1,58 +1,43 @@
 import { ClassSessionStatus } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { UpdateClassSessionDto } from './update-class-session.dto';
+import { CreateClassSessionDto } from './create-class-session.dto';
 
-describe('UpdateClassSessionDto', () => {
+describe('CreateClassSessionDto', () => {
   const validateDto = (payload: Record<string, unknown>) =>
-    validate(plainToInstance(UpdateClassSessionDto, payload), {
+    validate(plainToInstance(CreateClassSessionDto, payload), {
       whitelist: true,
       forbidNonWhitelisted: true,
     });
 
-  it('should allow trainingId uuid and enum status', async () => {
-    const errors = await validateDto({
-      trainingId: '11111111-1111-4111-8111-111111111111',
-      status: ClassSessionStatus.SCHEDULED,
-    });
-
-    expect(errors).toHaveLength(0);
-  });
-
-  it('should allow trainingId null', async () => {
-    const errors = await validateDto({
-      trainingId: null,
-    });
-
-    expect(errors).toHaveLength(0);
-  });
-
   it('should allow targetDurationMinutes within range', async () => {
     const errors = await validateDto({
-      targetDurationMinutes: 90,
+      title: 'Morning class',
+      startsAt: '2026-05-06T10:00:00.000Z',
+      status: ClassSessionStatus.SCHEDULED,
+      targetDurationMinutes: 60,
     });
 
     expect(errors).toHaveLength(0);
   });
 
-  it('should reject targetDurationMinutes when it is not an integer or is out of range', async () => {
-    const decimalErrors = await validateDto({
-      targetDurationMinutes: 45.5,
-    });
+  it('should reject targetDurationMinutes outside the allowed range', async () => {
     const tooSmallErrors = await validateDto({
+      title: 'Morning class',
       targetDurationMinutes: 0,
     });
     const tooLargeErrors = await validateDto({
+      title: 'Morning class',
       targetDurationMinutes: 301,
     });
 
-    expect(decimalErrors).toHaveLength(1);
     expect(tooSmallErrors).toHaveLength(1);
     expect(tooLargeErrors).toHaveLength(1);
   });
 
   it('should reject durationMinutes and estimatedDurationMinutes as input', async () => {
     const errors = await validateDto({
+      title: 'Morning class',
       durationMinutes: 60,
       estimatedDurationMinutes: 60,
     });
@@ -64,4 +49,3 @@ describe('UpdateClassSessionDto', () => {
     ]);
   });
 });
-

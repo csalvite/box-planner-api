@@ -110,6 +110,7 @@ describe('ClassSessionsService', () => {
         title: 'Morning class',
         startsAt,
         endsAt,
+        targetDurationMinutes: 75,
         status: ClassSessionStatus.SCHEDULED,
         isEnabled: true,
         notes: 'Bring wraps',
@@ -117,7 +118,15 @@ describe('ClassSessionsService', () => {
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         coach: { id: 'coach-1' },
         attendances: [{ profileId: 'owner-1' }, { profileId: 'student-2' }],
-        sections: [],
+        sections: [
+          {
+            id: 'section-1',
+            exercises: [
+              { id: 'exercise-1', durationSec: 600 },
+              { id: 'exercise-2', durationSec: 750 },
+            ],
+          },
+        ],
       },
     ];
     const training = { id: 'training-1', title: 'Basics' };
@@ -137,6 +146,7 @@ describe('ClassSessionsService', () => {
         title: true,
         startsAt: true,
         endsAt: true,
+        targetDurationMinutes: true,
         status: true,
         isEnabled: true,
         notes: true,
@@ -162,11 +172,21 @@ describe('ClassSessionsService', () => {
         title: 'Morning class',
         startsAt,
         endsAt,
+        targetDurationMinutes: 75,
+        estimatedDurationMinutes: 23,
         status: ClassSessionStatus.SCHEDULED,
         isEnabled: true,
         notes: 'Bring wraps',
         training,
-        sections: [],
+        sections: [
+          {
+            id: 'section-1',
+            exercises: [
+              { id: 'exercise-1', durationSec: 600 },
+              { id: 'exercise-2', durationSec: 750 },
+            ],
+          },
+        ],
         attendanceCount: 2,
         hasCurrentUserAttendance: true,
       },
@@ -183,6 +203,7 @@ describe('ClassSessionsService', () => {
         title: null,
         startsAt: new Date('2026-05-06T10:00:00.000Z'),
         endsAt: null,
+        targetDurationMinutes: null,
         status: ClassSessionStatus.SCHEDULED,
         isEnabled: true,
         notes: null,
@@ -202,6 +223,8 @@ describe('ClassSessionsService', () => {
       title: null,
       startsAt: new Date('2026-05-06T10:00:00.000Z'),
       endsAt: null,
+      targetDurationMinutes: null,
+      estimatedDurationMinutes: 0,
       status: ClassSessionStatus.SCHEDULED,
       isEnabled: true,
       notes: null,
@@ -223,6 +246,7 @@ describe('ClassSessionsService', () => {
         title: 'Open mat',
         startsAt,
         endsAt: null,
+        targetDurationMinutes: null,
         status: ClassSessionStatus.SCHEDULED,
         isEnabled: true,
         notes: null,
@@ -248,6 +272,8 @@ describe('ClassSessionsService', () => {
       title: 'Open mat',
       startsAt,
       endsAt: null,
+      targetDurationMinutes: null,
+      estimatedDurationMinutes: 0,
       status: ClassSessionStatus.SCHEDULED,
       isEnabled: true,
       notes: null,
@@ -292,6 +318,7 @@ describe('ClassSessionsService', () => {
         title: true,
         startsAt: true,
         endsAt: true,
+        targetDurationMinutes: true,
         status: true,
         isEnabled: true,
         notes: true,
@@ -326,6 +353,7 @@ describe('ClassSessionsService', () => {
         title: true,
         startsAt: true,
         endsAt: true,
+        targetDurationMinutes: true,
         status: true,
         isEnabled: true,
         notes: true,
@@ -346,6 +374,7 @@ describe('ClassSessionsService', () => {
       trainingId: 'training-1',
       startsAt: '2026-05-06T10:00:00.000Z',
       endsAt: '2026-05-06T11:00:00.000Z',
+      targetDurationMinutes: 60,
       title: 'Morning class',
       status: ClassSessionStatus.SCHEDULED,
       notes: 'Bring wraps',
@@ -374,6 +403,7 @@ describe('ClassSessionsService', () => {
         title: 'Morning class',
         startsAt: new Date('2026-05-06T10:00:00.000Z'),
         endsAt: new Date('2026-05-06T11:00:00.000Z'),
+        targetDurationMinutes: 60,
         status: ClassSessionStatus.SCHEDULED,
         isEnabled: undefined,
         notes: 'Bring wraps',
@@ -407,6 +437,7 @@ describe('ClassSessionsService', () => {
         title: 'Open mat',
         startsAt: new Date('2026-05-06T10:00:00.000Z'),
         endsAt: undefined,
+        targetDurationMinutes: undefined,
         status: ClassSessionStatus.SCHEDULED,
         isEnabled: undefined,
         notes: undefined,
@@ -446,6 +477,7 @@ describe('ClassSessionsService', () => {
         title: 'Clase preparada 1',
         startsAt: null,
         endsAt: undefined,
+        targetDurationMinutes: undefined,
         status: ClassSessionStatus.DRAFT,
         isEnabled: undefined,
         notes: undefined,
@@ -496,6 +528,7 @@ describe('ClassSessionsService', () => {
         title: 'Updated class',
         startsAt: undefined,
         endsAt: undefined,
+        targetDurationMinutes: undefined,
         status: ClassSessionStatus.COMPLETED,
         isEnabled: undefined,
         notes: undefined,
@@ -505,6 +538,37 @@ describe('ClassSessionsService', () => {
       id: 'session-1',
       title: 'Updated class',
       status: ClassSessionStatus.COMPLETED,
+    });
+  });
+
+  it('should update target duration minutes independently from estimated duration', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSession.update.mockResolvedValue({
+      id: 'session-1',
+      targetDurationMinutes: 90,
+    });
+
+    const result = await service.update('session-1', 'org-1', coachMembership, {
+      targetDurationMinutes: 90,
+    });
+
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        trainingId: undefined,
+        coachId: undefined,
+        title: undefined,
+        startsAt: undefined,
+        endsAt: undefined,
+        targetDurationMinutes: 90,
+        status: undefined,
+        isEnabled: undefined,
+        notes: undefined,
+      },
+    });
+    expect(result).toEqual({
+      id: 'session-1',
+      targetDurationMinutes: 90,
     });
   });
 
@@ -532,6 +596,7 @@ describe('ClassSessionsService', () => {
         title: undefined,
         startsAt: undefined,
         endsAt: undefined,
+        targetDurationMinutes: undefined,
         status: undefined,
         isEnabled: undefined,
         notes: undefined,
@@ -567,6 +632,7 @@ describe('ClassSessionsService', () => {
         title: undefined,
         startsAt: undefined,
         endsAt: undefined,
+        targetDurationMinutes: undefined,
         status: undefined,
         isEnabled: undefined,
         notes: undefined,
@@ -598,6 +664,7 @@ describe('ClassSessionsService', () => {
         title: undefined,
         startsAt: undefined,
         endsAt: undefined,
+        targetDurationMinutes: undefined,
         status: undefined,
         isEnabled: undefined,
         notes: undefined,

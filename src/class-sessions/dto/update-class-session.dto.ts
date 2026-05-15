@@ -3,9 +3,12 @@ import {
   IsDateString,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class UpdateClassSessionDto {
@@ -20,6 +23,12 @@ export class UpdateClassSessionDto {
   @IsOptional()
   @IsDateString()
   endsAt?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(300)
+  targetDurationMinutes?: number;
 
   @IsOptional()
   @IsString()

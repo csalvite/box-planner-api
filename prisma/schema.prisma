@@ -220,6 +220,7 @@ model ClassSession {
   title          String
   startsAt       DateTime?             @map("starts_at") @db.Timestamptz(6)
   endsAt         DateTime?             @map("ends_at") @db.Timestamptz(6)
+  targetDurationMinutes Int?           @map("target_duration_minutes")
   status         ClassSessionStatus    @default(SCHEDULED)
   notes          String?
   createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
