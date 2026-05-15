@@ -21,6 +21,7 @@ model Profile {
   acceptedInvitations  Invitation[]         @relation("InvitationAcceptedBy")
   sentInvitations      Invitation[]         @relation("InvitationInvitedBy")
   createdMedia         MediaAsset[]         @relation("MediaCreatedBy")
+  classScheduleDefaults ClassScheduleDefault[] @relation("ClassScheduleDefaultCoach")
   memberships          OrganizationMember[]
   users                users                @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   createdTrainings     Training[]           @relation("TrainingCreatedBy")
@@ -41,6 +42,7 @@ model Organization {
   classSessionSectionExercises ClassSessionSectionExercise[]
   classSessionSections         ClassSessionSection[]
   classSessions                ClassSession[]
+  classScheduleDefaults        ClassScheduleDefault[]
   exerciseTags                 ExerciseTag[]
   exercises                    Exercise[]
   invitations                  Invitation[]
@@ -244,6 +246,27 @@ model ClassSession {
   @@index([status], map: "idx_class_sessions_status")
   @@index([trainingId], map: "idx_class_sessions_training_id")
   @@map("class_sessions")
+  @@schema("public")
+}
+
+model ClassScheduleDefault {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  coachId        String?      @map("coach_id") @db.Uuid
+  weekday        Int
+  startsAtTime   DateTime     @map("starts_at_time") @db.Time(6)
+  endsAtTime     DateTime     @map("ends_at_time") @db.Time(6)
+  label          String?
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  coach          Profile?     @relation("ClassScheduleDefaultCoach", fields: [coachId], references: [id], onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([organizationId])
+  @@index([coachId])
+  @@index([organizationId, isActive, weekday], map: "idx_class_schedule_defaults_org_active_weekday")
+  @@map("class_schedule_defaults")
   @@schema("public")
 }
 

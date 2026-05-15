@@ -23,6 +23,13 @@ describe('ClassSessionsService', () => {
       update: jest.fn(),
       deleteMany: jest.fn(),
     },
+    classScheduleDefault: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     classSessionSection: {
       count: jest.fn(),
       create: jest.fn(),
@@ -41,6 +48,7 @@ describe('ClassSessionsService', () => {
     },
     exercise: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     organizationMember: {
       findFirst: jest.fn(),
@@ -54,7 +62,11 @@ describe('ClassSessionsService', () => {
       count: jest.fn(),
       deleteMany: jest.fn(),
     },
-    $transaction: jest.fn((operations) => Promise.all(operations)),
+    $transaction: jest.fn((operations) =>
+      typeof operations === 'function'
+        ? operations(prismaMock)
+        : Promise.all(operations),
+    ),
   };
 
   const coachMembership = {
@@ -739,6 +751,257 @@ describe('ClassSessionsService', () => {
       id: 'session-1',
       status: ClassSessionStatus.COMPLETED,
       isEnabled: false,
+    });
+  });
+
+  it('should schedule a class session from an active schedule default on an explicit date', async () => {
+    const startsAt = new Date('2026-05-12T21:00:00.000Z');
+    const endsAt = new Date('2026-05-12T22:00:00.000Z');
+    prismaMock.classSession.findFirst
+      .mockResolvedValueOnce({ id: 'session-1' })
+      .mockResolvedValueOnce({
+        id: 'session-1',
+        startsAt,
+        endsAt,
+        status: ClassSessionStatus.SCHEDULED,
+        sections: [],
+      });
+    prismaMock.classScheduleDefault.findFirst.mockResolvedValue({
+      id: 'schedule-default-1',
+      organizationId: 'org-1',
+      weekday: 2,
+      startsAtTime: new Date('1970-01-01T21:00:00.000Z'),
+      endsAtTime: new Date('1970-01-01T22:00:00.000Z'),
+      isActive: true,
+    });
+    prismaMock.classSession.update.mockResolvedValue({
+      id: 'session-1',
+      startsAt,
+      endsAt,
+      status: ClassSessionStatus.SCHEDULED,
+    });
+
+    const result = await service.scheduleFromDefault(
+      'session-1',
+      'org-1',
+      coachMembership,
+      {
+        scheduleDefaultId: 'schedule-default-1',
+        date: '2026-05-12',
+      },
+    );
+
+    expect(prismaMock.classScheduleDefault.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'schedule-default-1',
+        organizationId: 'org-1',
+        isActive: true,
+      },
+    });
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        startsAt,
+        endsAt,
+        status: ClassSessionStatus.SCHEDULED,
+      },
+    });
+    expect(result).toEqual({
+      id: 'session-1',
+      startsAt,
+      endsAt,
+      status: ClassSessionStatus.SCHEDULED,
+      sections: [],
+      estimatedDurationMinutes: 0,
+    });
+  });
+
+  it('should reject schedule defaults when explicit date does not match weekday', async () => {
+    prismaMock.classSession.findFirst.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classScheduleDefault.findFirst.mockResolvedValue({
+      id: 'schedule-default-1',
+      organizationId: 'org-1',
+      weekday: 5,
+      startsAtTime: new Date('1970-01-01T21:15:00.000Z'),
+      endsAtTime: new Date('1970-01-01T22:15:00.000Z'),
+      isActive: true,
+    });
+
+    await expect(
+      service.scheduleFromDefault('session-1', 'org-1', coachMembership, {
+        scheduleDefaultId: 'schedule-default-1',
+        date: '2026-05-12',
+      }),
+    ).rejects.toThrow('Date does not match schedule weekday');
+
+    expect(prismaMock.classSession.update).not.toHaveBeenCalled();
+  });
+
+  it('should save a full class session plan in one transaction', async () => {
+    const existingSection = {
+      id: 'section-1',
+      organizationId: 'org-1',
+      classSessionId: 'session-1',
+      name: 'Warmup',
+      objective: null,
+      estimatedDurationMinutes: null,
+      orderIndex: 0,
+      notes: null,
+      exercises: [
+        {
+          id: 'exercise-1',
+          organizationId: 'org-1',
+          sectionId: 'section-1',
+          exerciseId: null,
+          name: 'Shadow boxing',
+          description: null,
+          durationSec: 60,
+          reps: 10,
+          restSec: 0,
+          orderIndex: 0,
+          notes: null,
+        },
+      ],
+    };
+    const libraryExercise = {
+      id: 'library-exercise-1',
+      name: 'Jab cross',
+      shortDescription: 'Basic combo',
+      detailedDescription: 'Jab cross with footwork',
+      averageDurationMinutes: 5,
+    };
+    const savedSession = {
+      id: 'session-1',
+      title: 'Updated plan',
+      notes: 'Plan notes',
+      targetDurationMinutes: 60,
+      status: ClassSessionStatus.SCHEDULED,
+      sections: [
+        {
+          id: 'section-1',
+          exercises: [
+            { id: 'exercise-1', durationSec: 120 },
+            { id: 'exercise-2', durationSec: 300 },
+          ],
+        },
+      ],
+    };
+
+    prismaMock.classSession.findFirst
+      .mockResolvedValueOnce({ id: 'session-1' })
+      .mockResolvedValueOnce(savedSession);
+    prismaMock.classSessionSection.findMany.mockResolvedValue([
+      existingSection,
+    ]);
+    prismaMock.exercise.findMany.mockResolvedValue([libraryExercise]);
+    prismaMock.classSession.update.mockResolvedValue({ id: 'session-1' });
+    prismaMock.classSessionSection.deleteMany.mockResolvedValue({ count: 0 });
+    prismaMock.classSessionSection.update.mockResolvedValue({
+      id: 'section-1',
+    });
+    prismaMock.classSessionSectionExercise.deleteMany.mockResolvedValue({
+      count: 0,
+    });
+    prismaMock.classSessionSectionExercise.update.mockResolvedValue({
+      id: 'exercise-1',
+    });
+    prismaMock.classSessionSectionExercise.create.mockResolvedValue({
+      id: 'exercise-2',
+    });
+
+    const result = await service.saveFullPlan(
+      'session-1',
+      'org-1',
+      coachMembership,
+      {
+        title: 'Updated plan',
+        notes: 'Plan notes',
+        targetDurationMinutes: 60,
+        startsAt: '2026-05-12T21:00:00.000Z',
+        endsAt: '2026-05-12T22:00:00.000Z',
+        status: ClassSessionStatus.SCHEDULED,
+        sections: [
+          {
+            id: 'section-1',
+            name: 'Main work',
+            orderIndex: 0,
+            exercises: [
+              {
+                id: 'exercise-1',
+                name: 'Shadow boxing updated',
+                description: 'Updated description',
+                durationSec: 120,
+                orderIndex: 0,
+              },
+              {
+                exerciseId: 'library-exercise-1',
+                orderIndex: 1,
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function));
+    expect(prismaMock.classSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        title: 'Updated plan',
+        notes: 'Plan notes',
+        targetDurationMinutes: 60,
+        startsAt: new Date('2026-05-12T21:00:00.000Z'),
+        endsAt: new Date('2026-05-12T22:00:00.000Z'),
+        status: ClassSessionStatus.SCHEDULED,
+      },
+    });
+    expect(prismaMock.classSessionSection.deleteMany).toHaveBeenCalledWith({
+      where: {
+        classSessionId: 'session-1',
+        organizationId: 'org-1',
+        id: { notIn: ['section-1'] },
+      },
+    });
+    expect(prismaMock.classSessionSection.update).toHaveBeenCalledWith({
+      where: { id: 'section-1' },
+      data: {
+        name: 'Main work',
+        objective: undefined,
+        estimatedDurationMinutes: undefined,
+        orderIndex: 0,
+        notes: undefined,
+      },
+    });
+    expect(prismaMock.classSessionSectionExercise.update).toHaveBeenCalledWith({
+      where: { id: 'exercise-1' },
+      data: {
+        exerciseId: null,
+        name: 'Shadow boxing updated',
+        description: 'Updated description',
+        durationSec: 120,
+        reps: 10,
+        restSec: 0,
+        orderIndex: 0,
+        notes: null,
+      },
+    });
+    expect(prismaMock.classSessionSectionExercise.create).toHaveBeenCalledWith({
+      data: {
+        organizationId: 'org-1',
+        sectionId: 'section-1',
+        exerciseId: 'library-exercise-1',
+        name: 'Jab cross',
+        description: 'Jab cross with footwork',
+        durationSec: 300,
+        reps: undefined,
+        restSec: undefined,
+        orderIndex: 1,
+        notes: undefined,
+      },
+    });
+    expect(result).toEqual({
+      ...savedSession,
+      estimatedDurationMinutes: 7,
     });
   });
 

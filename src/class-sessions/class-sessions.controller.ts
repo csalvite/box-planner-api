@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -21,9 +22,11 @@ import { ClassSessionsService } from './class-sessions.service';
 import { CreateClassSessionDto } from './dto/create-class-session.dto';
 import { CreateClassSessionSectionDto } from './dto/create-class-session-section.dto';
 import { CreateClassSessionSectionExerciseDto } from './dto/create-class-session-section-exercise.dto';
+import { FullClassSessionPlanDto } from './dto/full-class-session-plan.dto';
 import { ListClassSessionsDto } from './dto/list-class-sessions.dto';
 import { ReorderClassSessionSectionExercisesDto } from './dto/reorder-class-session-section-exercises.dto';
 import { ReorderClassSessionSectionsDto } from './dto/reorder-class-session-sections.dto';
+import { ScheduleClassSessionFromDefaultDto } from './dto/schedule-class-session-from-default.dto';
 import { UpdateClassSessionDto } from './dto/update-class-session.dto';
 import { UpdateClassSessionSectionDto } from './dto/update-class-session-section.dto';
 import { UpdateClassSessionSectionExerciseDto } from './dto/update-class-session-section-exercise.dto';
@@ -123,6 +126,40 @@ export class ClassSessionsController {
     @Body() dto: UpdateClassSessionDto,
   ) {
     return this.classSessionsService.update(
+      id,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Post(':id/schedule-from-default')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Programar clase desde horario por defecto' })
+  scheduleFromDefault(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('id') id: string,
+    @Body() dto: ScheduleClassSessionFromDefaultDto,
+  ) {
+    return this.classSessionsService.scheduleFromDefault(
+      id,
+      organizationId,
+      membership,
+      dto,
+    );
+  }
+
+  @Put(':id/full-plan')
+  @OrganizationWriteAccess()
+  @ApiOperation({ summary: 'Guardar plan completo de una clase' })
+  saveFullPlan(
+    @OrganizationId() organizationId: string,
+    @OrganizationMembership() membership: OrganizationMember,
+    @Param('id') id: string,
+    @Body() dto: FullClassSessionPlanDto,
+  ) {
+    return this.classSessionsService.saveFullPlan(
       id,
       organizationId,
       membership,

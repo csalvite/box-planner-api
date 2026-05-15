@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateClassSessionDto } from './dto/create-class-session.dto';
 import { CreateClassSessionSectionDto } from './dto/create-class-session-section.dto';
 import { CreateClassSessionSectionExerciseDto } from './dto/create-class-session-section-exercise.dto';
+import { FullClassSessionPlanDto } from './dto/full-class-session-plan.dto';
 import {
   ClassSessionEnabledFilter,
   ClassSessionListStatus,
@@ -23,10 +24,21 @@ import {
 } from './dto/list-class-sessions.dto';
 import { ReorderClassSessionSectionExercisesDto } from './dto/reorder-class-session-section-exercises.dto';
 import { ReorderClassSessionSectionsDto } from './dto/reorder-class-session-sections.dto';
+import { ScheduleClassSessionFromDefaultDto } from './dto/schedule-class-session-from-default.dto';
 import { UpdateClassSessionDto } from './dto/update-class-session.dto';
 import { UpdateClassSessionSectionDto } from './dto/update-class-session-section.dto';
 import { UpdateClassSessionSectionExerciseDto } from './dto/update-class-session-section-exercise.dto';
 import { UpdateClassSessionStatusDto } from './dto/update-class-session-status.dto';
+
+type FullPlanSection = FullClassSessionPlanDto['sections'][number];
+type FullPlanExercise = FullPlanSection['exercises'][number];
+type LibraryExerciseSnapshot = {
+  id: string;
+  name: string;
+  shortDescription: string | null;
+  detailedDescription: string | null;
+  averageDurationMinutes: number | null;
+};
 
 @Injectable()
 export class ClassSessionsService {
@@ -225,6 +237,225 @@ export class ClassSessionsService {
         isEnabled: dto.isEnabled,
       },
     });
+  }
+
+  async scheduleFromDefault(
+    id: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: ScheduleClassSessionFromDefaultDto,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureClassSessionExists(id, organizationId);
+
+    const scheduleDefault =
+      await this.prisma.classScheduleDefault.findFirst({
+        where: {
+          id: dto.scheduleDefaultId,
+          organizationId,
+          isActive: true,
+        },
+      });
+
+    if (!scheduleDefault) {
+      throw new NotFoundException('Class schedule default not found');
+    }
+
+    const date = dto.date ?? this.nextDateForWeekday(scheduleDefault.weekday);
+    if (this.weekdayFromDateString(date) !== scheduleDefault.weekday) {
+      throw new BadRequestException('Date does not match schedule weekday');
+    }
+
+    await this.prisma.classSession.update({
+      where: { id },
+      data: {
+        startsAt: this.combineDateAndTime(date, scheduleDefault.startsAtTime),
+        endsAt: this.combineDateAndTime(date, scheduleDefault.endsAtTime),
+        status: ClassSessionStatus.SCHEDULED,
+      },
+    });
+
+    return this.findOne(id, organizationId, membership);
+  }
+
+  async scheduleFromDefaultForUser(
+    userId: string,
+    id: string,
+    organizationId: string | undefined,
+    dto: ScheduleClassSessionFromDefaultDto,
+  ) {
+    const membership = await this.ensureCanManageClassSessionForUser(
+      userId,
+      id,
+      organizationId,
+    );
+
+    return this.scheduleFromDefault(id, membership.organizationId, membership, dto);
+  }
+
+  async saveFullPlan(
+    id: string,
+    organizationId: string,
+    membership: OrganizationMember,
+    dto: FullClassSessionPlanDto,
+  ) {
+    this.ensureCanManage(membership);
+    await this.ensureClassSessionExists(id, organizationId);
+
+    this.ensureNoDuplicateIds(
+      dto.sections
+        .map((section) => section.id)
+        .filter((sectionId): sectionId is string => sectionId !== undefined),
+      'Duplicated class session section id',
+    );
+
+    for (const section of dto.sections) {
+      this.ensureNoDuplicateIds(
+        section.exercises
+          .map((exercise) => exercise.id)
+          .filter((exerciseId): exerciseId is string => exerciseId !== undefined),
+        'Duplicated class session section exercise id',
+      );
+    }
+
+    const existingSections = await this.prisma.classSessionSection.findMany({
+      where: { classSessionId: id, organizationId },
+      include: { exercises: true },
+    });
+    const existingSectionsById = new Map(
+      existingSections.map((section) => [section.id, section]),
+    );
+
+    for (const section of dto.sections) {
+      if (section.id && !existingSectionsById.has(section.id)) {
+        throw new NotFoundException('Class session section not found');
+      }
+
+      const existingExercisesById = new Map(
+        (section.id
+          ? existingSectionsById.get(section.id)?.exercises
+          : []
+        )?.map((exercise) => [exercise.id, exercise]) ?? [],
+      );
+
+      for (const exercise of section.exercises) {
+        if (exercise.id && !existingExercisesById.has(exercise.id)) {
+          throw new NotFoundException(
+            'Class session section exercise not found',
+          );
+        }
+      }
+    }
+
+    const libraryExerciseIds = [
+      ...new Set(
+        dto.sections.flatMap((section) =>
+          section.exercises
+            .map((exercise) => exercise.exerciseId)
+            .filter((exerciseId): exerciseId is string => Boolean(exerciseId)),
+        ),
+      ),
+    ];
+    const libraryExercises = await this.findAccessibleLibraryExercises(
+      libraryExerciseIds,
+      organizationId,
+    );
+
+    const savedSession = await this.prisma.$transaction(async (tx) => {
+      await tx.classSession.update({
+        where: { id },
+        data: {
+          title: dto.title,
+          notes: dto.notes,
+          targetDurationMinutes: dto.targetDurationMinutes,
+          startsAt: this.toOptionalDateUpdate(dto.startsAt),
+          endsAt: this.toOptionalDateUpdate(dto.endsAt),
+          status:
+            dto.status === undefined
+              ? this.toUpdateStatus(dto.startsAt)
+              : this.toPrismaStatus(dto.status),
+        },
+      });
+
+      const payloadSectionIds = dto.sections
+        .map((section) => section.id)
+        .filter((sectionId): sectionId is string => sectionId !== undefined);
+
+      await tx.classSessionSection.deleteMany({
+        where: {
+          classSessionId: id,
+          organizationId,
+          ...(payloadSectionIds.length > 0
+            ? { id: { notIn: payloadSectionIds } }
+            : {}),
+        },
+      });
+
+      for (const [sectionIndex, section] of dto.sections.entries()) {
+        const savedSection = section.id
+          ? await tx.classSessionSection.update({
+              where: { id: section.id },
+              data: {
+                name: section.name,
+                objective: section.objective,
+                estimatedDurationMinutes: section.estimatedDurationMinutes,
+                orderIndex: section.orderIndex ?? sectionIndex,
+                notes: section.notes,
+              },
+            })
+          : await tx.classSessionSection.create({
+              data: {
+                organizationId,
+                classSessionId: id,
+                name: section.name,
+                objective: section.objective,
+                estimatedDurationMinutes: section.estimatedDurationMinutes,
+                orderIndex: section.orderIndex ?? sectionIndex,
+                notes: section.notes,
+              },
+            });
+
+        await this.syncFullPlanSectionExercises(
+          tx,
+          organizationId,
+          savedSection.id,
+          section.exercises,
+          existingSectionsById.get(section.id ?? '')?.exercises ?? [],
+          libraryExercises,
+        );
+      }
+
+      return tx.classSession.findFirst({
+        where: { id, organizationId },
+        include: this.classSessionDetailInclude(),
+      });
+    });
+
+    if (!savedSession) {
+      throw new NotFoundException('Class session not found');
+    }
+
+    return {
+      ...savedSession,
+      estimatedDurationMinutes: this.calculateEstimatedDurationMinutes(
+        savedSession.sections,
+      ),
+    };
+  }
+
+  async saveFullPlanForUser(
+    userId: string,
+    id: string,
+    organizationId: string | undefined,
+    dto: FullClassSessionPlanDto,
+  ) {
+    const membership = await this.ensureCanManageClassSessionForUser(
+      userId,
+      id,
+      organizationId,
+    );
+
+    return this.saveFullPlan(id, membership.organizationId, membership, dto);
   }
 
   async hardDelete(
@@ -729,6 +960,149 @@ export class ClassSessionsService {
     };
   }
 
+  private async syncFullPlanSectionExercises(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    sectionId: string,
+    exercises: FullPlanExercise[],
+    existingExercises: Array<{
+      id: string;
+      exerciseId: string | null;
+      name: string;
+      description: string | null;
+      durationSec: number | null;
+      reps: number | null;
+      restSec: number | null;
+      orderIndex: number;
+      notes: string | null;
+    }>,
+    libraryExercises: Map<string, LibraryExerciseSnapshot>,
+  ) {
+    const existingExercisesById = new Map(
+      existingExercises.map((exercise) => [exercise.id, exercise]),
+    );
+    const payloadExerciseIds = exercises
+      .map((exercise) => exercise.id)
+      .filter((exerciseId): exerciseId is string => exerciseId !== undefined);
+
+    await tx.classSessionSectionExercise.deleteMany({
+      where: {
+        sectionId,
+        organizationId,
+        ...(payloadExerciseIds.length > 0
+          ? { id: { notIn: payloadExerciseIds } }
+          : {}),
+      },
+    });
+
+    for (const [exerciseIndex, exercise] of exercises.entries()) {
+      const libraryExercise = exercise.exerciseId
+        ? libraryExercises.get(exercise.exerciseId)
+        : null;
+
+      if (exercise.id) {
+        const existingExercise = existingExercisesById.get(exercise.id);
+        if (!existingExercise) {
+          throw new NotFoundException(
+            'Class session section exercise not found',
+          );
+        }
+
+        await tx.classSessionSectionExercise.update({
+          where: { id: exercise.id },
+          data: {
+            exerciseId: this.hasOwn(exercise, 'exerciseId')
+              ? (libraryExercise?.id ?? null)
+              : existingExercise.exerciseId,
+            name: this.hasOwn(exercise, 'name')
+              ? (exercise.name ?? existingExercise.name)
+              : existingExercise.name,
+            description: this.hasOwn(exercise, 'description')
+              ? exercise.description
+              : existingExercise.description,
+            durationSec: this.hasOwn(exercise, 'durationSec')
+              ? exercise.durationSec
+              : existingExercise.durationSec,
+            reps: this.hasOwn(exercise, 'reps')
+              ? exercise.reps
+              : existingExercise.reps,
+            restSec: this.hasOwn(exercise, 'restSec')
+              ? exercise.restSec
+              : existingExercise.restSec,
+            orderIndex: exercise.orderIndex ?? exerciseIndex,
+            notes: this.hasOwn(exercise, 'notes')
+              ? exercise.notes
+              : existingExercise.notes,
+          },
+        });
+        continue;
+      }
+
+      if (!libraryExercise && !exercise.name) {
+        throw new BadRequestException('Exercise name is required');
+      }
+
+      await tx.classSessionSectionExercise.create({
+        data: {
+          organizationId,
+          sectionId,
+          exerciseId: libraryExercise?.id ?? null,
+          name: exercise.name ?? libraryExercise?.name ?? '',
+          description:
+            exercise.description ??
+            libraryExercise?.detailedDescription ??
+            libraryExercise?.shortDescription,
+          durationSec:
+            exercise.durationSec ??
+            this.minutesToSeconds(libraryExercise?.averageDurationMinutes),
+          reps: exercise.reps,
+          restSec: exercise.restSec,
+          orderIndex: exercise.orderIndex ?? exerciseIndex,
+          notes: exercise.notes,
+        },
+      });
+    }
+  }
+
+  private async findAccessibleLibraryExercises(
+    ids: string[],
+    organizationId: string,
+  ) {
+    if (ids.length === 0) {
+      return new Map<string, LibraryExerciseSnapshot>();
+    }
+
+    const exercises = await this.prisma.exercise.findMany({
+      where: {
+        id: { in: ids },
+        OR: [{ isGlobal: true }, { organizationId }],
+      },
+      select: {
+        id: true,
+        name: true,
+        shortDescription: true,
+        detailedDescription: true,
+        averageDurationMinutes: true,
+      },
+    });
+
+    if (exercises.length !== ids.length) {
+      throw new NotFoundException('Exercise not found');
+    }
+
+    return new Map(exercises.map((exercise) => [exercise.id, exercise]));
+  }
+
+  private ensureNoDuplicateIds(ids: string[], message: string) {
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException(message);
+    }
+  }
+
+  private hasOwn(object: object, property: string) {
+    return Object.prototype.hasOwnProperty.call(object, property);
+  }
+
   private ensureCanManage(membership: OrganizationMember) {
     const allowedRoles: OrganizationRole[] = [
       OrganizationRole.OWNER,
@@ -1032,6 +1406,43 @@ export class ClassSessionsService {
     }
 
     return value ? new Date(value) : null;
+  }
+
+  private nextDateForWeekday(weekday: number) {
+    const today = new Date();
+    const todayUtc = new Date(
+      Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        today.getUTCDate(),
+      ),
+    );
+    const todayWeekday = this.weekdayFromDate(todayUtc);
+    const daysUntil = (weekday - todayWeekday + 7) % 7;
+    todayUtc.setUTCDate(todayUtc.getUTCDate() + daysUntil);
+
+    return todayUtc.toISOString().slice(0, 10);
+  }
+
+  private weekdayFromDateString(date: string) {
+    return this.weekdayFromDate(new Date(`${date}T00:00:00.000Z`));
+  }
+
+  private weekdayFromDate(date: Date) {
+    const day = date.getUTCDay();
+    return day === 0 ? 7 : day;
+  }
+
+  private combineDateAndTime(date: string, time: Date | string) {
+    return new Date(`${date}T${this.timeToString(time)}.000Z`);
+  }
+
+  private timeToString(value: Date | string) {
+    if (value instanceof Date) {
+      return value.toISOString().slice(11, 19);
+    }
+
+    return value.length === 5 ? `${value}:00` : value;
   }
 
   private buildFindAllWhere(
